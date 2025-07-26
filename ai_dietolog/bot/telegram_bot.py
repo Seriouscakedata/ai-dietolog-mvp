@@ -1,289 +1,271 @@
-"""Entry point for the AI Dietolog Telegram bot.
+"""Telegram bot for AI Dietolog interactive profile setup.
 
-This module initialises the Telegram application, registers basic
-commands and starts polling.  Only minimal scaffolding is provided here
-to demonstrate how the bot could be structured.
+This bot collects user profile information through a conversation and
+creates a diet profile with personalized norms using compute_norms().
 
-To use this bot, set the environment variables ``TELEGRAM_BOT_TOKEN`` and
-``OPENAI_API_KEY`` or populate ``config.json`` accordingly.  The
-application will not perform any network requests until a valid token is
-provided.
 """
 
 from __future__ import annotations
 
-import json
-import logging
 import os
-from pathlib import Path
+from typing import List
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from telegram.ext import (
     Application,
-    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    CallbackQueryHandler,
     ConversationHandler,
     MessageHandler,
     filters,
 )
 
-from openai import AsyncOpenAI
-
 from ..core import storage
 from ..agents.profile_collector import build_profile
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Conversation states: mandatory questions, optional details and confirmation
-(MANDATORY, OPTIONAL, CONFIRM) = range(3)
-
-
-def load_config() -> dict:
-    """Load configuration from config.json or environment variables."""
-    cfg_path = Path(__file__).resolve().parent.parent / "config.json"
-    if cfg_path.exists():
-        with cfg_path.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    return {
-        "telegram_bot_token": os.getenv("TELEGRAM_BOT_TOKEN", ""),
-        "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
-    }
+# Conversation states
+(
+    GENDER_AGE_HEIGHT_WEIGHT,
+    GOAL,
+    ACTIVITY,
+    RESTRICTIONS,
+    PREFERENCES,
+    MEDICAL,
+    CONFIRM,
+) = range(7)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Respond to /start with a welcome message and inline buttons."""
+    """Send a welcome message with an action button."""
     keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Настроить профиль", callback_data="setup_profile")]]
+        [
+            [
+                InlineKeyboardButton(
+                    "Настроить профиль", callback_data="setup_profile"
+                )
+            ]
+        ]
     )
     await update.message.reply_text(
-        "Добро пожаловать в AI‑диетолог! Выберите действие:",
+        "Добро пожаловать в AI ‑диетолог! Выберите действие:",
         reply_markup=keyboard,
     )
 
-async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Entry point for the profile setup conversation."""
-    if update.callback_query:
-        await update.callback_query.answer()
-    context.user_data.clear()
-    await update.effective_message.reply_text(
-        "\U0001F4DD Давайте составим профиль. \n"
-        "Ответьте одним сообщением на вопросы:\n"
-        "1\uFE0F\u20E3 Рост (см)\n"
-        "2\uFE0F\u20E3 Вес (кг)\n"
-        "3\uFE0F\u20E3 Возраст\n"
-        "4\uFE0F\u20E3 Целевой вес\n"
-        "5\uFE0F\u20E3 Уровень активности\n"
-        "6\uFE0F\u20E3 Срок достижения цели (дни)"
-    )
-    return MANDATORY
 
-
-async def _extract(text: str, api_key: str, system: str) -> dict:
-    """Helper to call OpenAI and parse JSON."""
-    client = AsyncOpenAI(api_key=api_key)
-    resp = await client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "system", "content": system}, {"role": "user", "content": text}],
-        temperature=0,
-    )
-    return json.loads(resp.choices[0].message.content)
-
-
-async def extract_basic(text: str, api_key: str) -> dict:
-    """Parse mandatory profile fields from user text."""
-    system = (
-        "You are a nutrition assistant. Extract JSON with keys: age, height_cm, "
-        "weight_kg, target_weight_kg, activity_level (sedentary/moderate/high), "
-        "timeframe_days, gender. Use numbers without units and null if missing."
-    )
-    return await _extract(text, api_key, system)
-
-
-async def extract_optional(text: str, api_key: str) -> dict:
-    """Parse optional profile fields from user text."""
-    system = (
-        "You are a nutrition assistant. Extract JSON with optional keys: gender, "
-        "waist_cm, bust_cm, hips_cm, restrictions (list), preferences (list), "
-        "medical (list). Use null or empty list if not mentioned."
-    )
-    return await _extract(text, api_key, system)
-
-
-def summarise_profile(data: dict) -> str:
-    """Return a human-friendly summary of extracted data."""
-    lines = []
-    if data.get("gender"):
-        lines.append(f"Пол: {data['gender']}")
-    lines.extend(
-        [
-            f"Возраст: {data.get('age')}",
-            f"Рост: {data.get('height_cm')} см",
-            f"Вес: {data.get('weight_kg')} кг",
-            f"Целевой вес: {data.get('target_weight_kg')} кг",
-            f"Активность: {data.get('activity_level')}",
-            f"Срок: {data.get('timeframe_days')} дн.",
-        ]
-    )
-    if data.get("waist_cm"):
-        lines.append(f"Талия: {data['waist_cm']} см")
-    if data.get("bust_cm"):
-        lines.append(f"Грудь: {data['bust_cm']} см")
-    if data.get("hips_cm"):
-        lines.append(f"Бедра: {data['hips_cm']} см")
-    if data.get("restrictions"):
-        lines.append("Непереносимости: " + ", ".join(data["restrictions"]))
-    if data.get("preferences"):
-        lines.append("Предпочтения: " + ", ".join(data["preferences"]))
-    if data.get("medical"):
-        lines.append("Медицинские ограничения: " + ", ".join(data["medical"]))
-    return "\n".join(lines)
-
-
-def validate_mandatory(data: dict) -> str | None:
-    """Return an error message if values look unrealistic."""
-    required = ["age", "height_cm", "weight_kg", "target_weight_kg", "timeframe_days", "activity_level"]
-    if any(data.get(f) is None for f in required):
-        return "Не удалось распознать все значения."
-    try:
-        age = int(data["age"])
-        height = float(data["height_cm"])
-        weight = float(data["weight_kg"])
-        target = float(data["target_weight_kg"])
-        timeframe = int(data["timeframe_days"])
-    except (TypeError, ValueError):
-        return "Проверьте вводимые числа."
-    if not 100 <= height <= 250:
-        return "Рост выглядит нереалистично."
-    if not 30 <= weight <= 300:
-        return "Вес выглядит нереалистично."
-    if not 10 <= age <= 100:
-        return "Возраст выглядит нереалистично."
-    if not 30 <= target <= 300:
-        return "Целевой вес выглядит нереалистично."
-    if timeframe <= 0:
-        return "Срок должен быть больше нуля."
-    diff = abs(weight - target)
-    max_weekly = 1.0
-    weeks = timeframe / 7
-    if weeks > 0 and diff / weeks > max_weekly:
-        return "Цель слишком быстрая, скорректируйте сроки или вес."
-    return None
-
-
-async def handle_mandatory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    cfg = load_config()
-    api_key = cfg.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        await update.message.reply_text("OpenAI API key не настроен")
-        return ConversationHandler.END
-    try:
-        data = await extract_basic(update.message.text, api_key)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Mandatory extraction failed: %s", exc)
-        await update.message.reply_text("Не удалось разобрать сообщение, попробуйте ещё раз")
-        return MANDATORY
-    error = validate_mandatory(data)
-    if error:
-        await update.message.reply_text(error + " Попробуйте ещё раз")
-        return MANDATORY
-    context.user_data["mandatory"] = data
-    await update.message.reply_text(
-        "\uD83D\uDCDD Теперь можете указать доп. информацию: пол, окружности, предпочтения или аллергию. Если ничего добавлять не хотите, напишите 'нет'."
-    )
-    return OPTIONAL
-
-
-async def handle_optional(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    cfg = load_config()
-    api_key = cfg.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        await update.message.reply_text("OpenAI API key не настроен")
-        return ConversationHandler.END
-    text = update.message.text.strip()
-    if text.lower() == "нет":
-        data = {}
-    else:
-        try:
-            data = await extract_optional(text, api_key)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Optional extraction failed: %s", exc)
-            await update.message.reply_text("Не удалось разобрать сообщение, попробуйте ещё раз")
-            return OPTIONAL
-    context.user_data["optional"] = data
-    merged = {**context.user_data.get("mandatory", {}), **data}
-    summary = summarise_profile(merged)
-    context.user_data["profile"] = merged
-    await update.message.reply_text(summary + "\nВсе верно? (да/нет)")
-    return CONFIRM
-
-
-async def finish_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text.strip().lower().startswith("д"):
-        data = context.user_data.get("profile", {})
-        gender = data.get("gender") or "female"
-        target_change = float(data["weight_kg"]) - float(data["target_weight_kg"])
-        goal_type = "maintain"
-        if target_change > 0:
-            goal_type = "lose_weight"
-        elif target_change < 0:
-            goal_type = "gain_weight"
-        profile = build_profile(
-            gender=gender,
-            age=int(data["age"]),
-            height_cm=float(data["height_cm"]),
-            weight_kg=float(data["weight_kg"]),
-            activity_level=data["activity_level"],
-            goal_type=goal_type,
-            target_change_kg=target_change,
-            timeframe_days=int(data["timeframe_days"]),
-            restrictions=data.get("restrictions"),
-            preferences=data.get("preferences"),
-            medical=data.get("medical"),
-        )
-        for key in ("waist_cm", "bust_cm", "hips_cm"):
-            if data.get(key) is not None:
-                profile.personal[key] = data[key]
-        storage.save_profile(update.effective_user.id, profile)
-        await update.message.reply_text(
-            f"Профиль создан. Целевая калорийность: {profile.norms.target_kcal} ккал."
-        )
-        return ConversationHandler.END
-    await update.message.reply_text("Опишите данные заново:")
-    return MANDATORY
-
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.effective_message.reply_text("Создание профиля отменено.")
+async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle inline keyboard button clicks."""
+    query = update.callback_query
+    await query.answer()
+    if query.data == "setup_profile":
+        # start the profile setup conversation
+        return await setup_profile(update, context)
     return ConversationHandler.END
 
 
+async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Initiate the profile setup conversation."""
+    message = update.effective_message
+    context.user_data.clear()
+    await message.reply_text(
+        "Укажите ваш пол (male/female), возраст (let), рост (cm) и вес (kg) через пробел.\n"
+        "Пример: male 38 188 95.5"
+    )
+    return GENDER_AGE_HEIGHT_WEIGHT
+
+
+async def collect_basic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Collect gender, age, height and weight."""
+    text = update.message.text.strip()
+    parts = text.split()
+    if len(parts) != 4:
+        await update.message.reply_text(
+            "Пожалуйста, укажите данные в формате: пол возраст рост вес (example: male 38 180 80)."
+        )
+        return GENDER_AGE_HEIGHT_WEIGHT
+    gender_raw, age_str, height_str, weight_str = parts
+    gender = gender_raw.lower()
+    if gender.startswith("m"):
+        gender = "male"
+    elif gender.startswith("f"):
+        gender = "female"
+    else:
+        await update.message.reply_text(
+            "Пол должен быть 'male' или 'female'. Попробуйте ещё раз."
+        )
+        return GENDER_AGE_HEIGHT_WEIGHT
+    try:
+        age = int(age_str)
+        height_cm = float(height_str)
+        weight_kg = float(weight_str)
+    except ValueError:
+        await update.message.reply_text(
+            "Возраст, рост и вес должны быть числами. Попробуйте ещё раз."
+        )
+        return GENDER_AGE_HEIGHT_WEIGHT
+
+    context.user_data["gender"] = gender
+    context.user_data["age"] = age
+    context.user_data["height_cm"] = height_cm
+    context.user_data["weight_kg"] = weight_kg
+
+    await update.message.reply_text(
+        "Укажите цель: lose, maintain или gain, затем изменение веса (kg) и срок (days).\n"
+        "Пример: lose 5 30"
+    )
+    return GOAL
+
+
+async def collect_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Collect goal type, delta and timeframe."""
+    text = update.message.text.strip()
+    parts = text.split()
+    if len(parts) != 3:
+        await update.message.reply_text(
+            "Пожалуйста, укажите цель, изменение и срок в формате: lose 5 30."
+        )
+        return GOAL
+    goal_raw, delta_str, days_str = parts
+    goal_raw = goal_raw.lower()
+    if goal_raw not in {"lose", "maintain", "gain"}:
+        await update.message.reply_text(
+            "Цель должна быть: lose, maintain или gain."
+        )
+        return GOAL
+    if goal_raw == "lose":
+        goal_type = "lose_weight"
+    elif goal_raw == "gain":
+        goal_type = "gain_weight"
+    else:
+        goal_type = "maintain"
+    try:
+        delta = float(delta_str)
+        days = int(days_str)
+    except ValueError:
+        await update.message.reply_text(
+            "Изменение веса и срок должны быть числами."
+        )
+        return GOAL
+    context.user_data["goal_type"] = goal_type
+    context.user_data["target_change_kg"] = delta
+    context.user_data["timeframe_days"] = days
+
+    await update.message.reply_text(
+        "Уровень активности: sedentary, moderate или high."
+    )
+    return ACTIVITY
+
+
+async def collect_activity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Collect activity level."""
+    level = update.message.text.strip().lower()
+    mapping = {
+        "низкий": "sedentary",
+        "sedentary": "sedentary",
+        "умеренный": "moderate",
+        "moderate": "moderate",
+        "высокий": "high",
+        "high": "high",
+    }
+    activity = mapping.get(level)
+    if not activity:
+        await update.message.reply_text(
+            "Уровень активности должен быть: sedentary/\u043d\u0438\u0437\u043a\u0438\u0439, moderate/\u0443\u043c\u0435\u0440\u0435\u043d\u043d\u044b\u0439 или high/\u0432\u044b\u0441\u043e\u043a\u0438\u0439."
+        )
+        return ACTIVITY
+    context.user_data["activity_level"] = activity
+    await update.message.reply_text(
+        "Есть ли непереносимости / аллергии? Если нет, напишите 'нет'."
+    )
+    return RESTRICTIONS
+
+
+def _parse_optional_list(text: str) -> List[str]:
+    """Parse a comma or space separated list of items, ignoring 'нет'."""
+    if not text or text.lower().strip() in {"\u043d\u0435\u0442", "no"}:
+        return []
+    parts = [p.strip() for p in text.replace(";", ",").split(",")]
+    if len(parts) == 1:
+        parts = [p.strip() for p in text.split()]
+    return [p for p in parts if p]
+
+
+async def collect_restrictions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Collect intolerances and allergies."""
+    context.user_data["restrictions"] = _parse_optional_list(update.message.text)
+    await update.message.reply_text(
+        "Продукты, которые не любите или избегаете? Если нет, напишите 'нет'."
+    )
+    return PREFERENCES
+
+
+async def collect_preferences(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Collect disliked foods."""
+    context.user_data["preferences"] = _parse_optional_list(update.message.text)
+    await update.message.reply_text(
+        "Хронические заболевания / медицинские ограничения? Если нет, напишите 'нет'."
+    )
+    return MEDICAL
+
+
+async def collect_medical(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Collect medical conditions and complete profile."""
+    context.user_data["medical"] = _parse_optional_list(update.message.text)
+    data = context.user_data
+    profile = build_profile(
+        gender=data["gender"],
+        age=data["age"],
+        height_cm=data["height_cm"],
+        weight_kg=data["weight_kg"],
+        activity_level=data["activity_level"],
+        goal_type=data["goal_type"],
+        target_change_kg=data["target_change_kg"],
+        timeframe_days=data["timeframe_days"],
+        restrictions=data["restrictions"],
+        preferences=data["preferences"],
+        medical=data["medical"],
+    )
+    user_id = update.effective_user.id
+    storage.save_profile(user_id, profile)
+    await update.message.reply_text(
+        f"\u041f\u0440\u043e\u0444\u0438\u043b\u044c \u0441\u043e\u0437\u0434\u0430\u043d. \u0412\u0430\u0448\u0430 \u0446\u0435\u043b\u0435\u0432\u0430\u044f \u043a\u0430\u043b\u043e\u0440\u0438\u0439\u043d\u043e\u0441\u0442\u044c: {profile.norms.target_kcal} \u043a\u043a\u0430\u043b."
+    )
+    return ConversationHandler.END
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel the conversation."""
+    await update.effective_message.reply_text("\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u043f\u0440\u043e\u0444\u0438\u043b\u044f \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u043e.")
+    return ConversationHandler.END
 
 
 def main() -> None:
-    """Main entry point.  Instantiate the bot and run polling."""
-    cfg = load_config()
-    token = cfg.get("telegram_bot_token") or os.getenv("TELEGRAM_BOT_TOKEN")
+    """Main entry point. Instantiate the bot and run polling."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        # Do not crash if token is missing; simply log and exit.
-        logger.warning("TELEGRAM_BOT_TOKEN is not set; bot will not start.")
+        print("TELEGRAM_BOT_TOKEN is not set; bot will not start.")
         return
     application = Application.builder().token(token).build()
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("setup_profile", setup_profile),
-            CallbackQueryHandler(setup_profile, pattern="^setup_profile$")
+            CallbackQueryHandler(handle_button_click, pattern="^setup_profile$")
         ],
         states={
-            MANDATORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_mandatory)],
-            OPTIONAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_optional)],
-            CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, finish_profile)],
+            GENDER_AGE_HEIGHT_WEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_basic)],
+            GOAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_goal)],
+            ACTIVITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_activity)],
+            RESTRICTIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_restrictions)],
+            PREFERENCES: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_preferences)],
+            MEDICAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_medical)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(conv_handler)
     application.run_polling()
