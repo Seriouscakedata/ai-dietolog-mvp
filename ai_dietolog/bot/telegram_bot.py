@@ -17,8 +17,13 @@ import logging
 import os
 from pathlib import Path
 
-from telegram import Update
-from telegram.ext import (Application, CommandHandler, ContextTypes)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    CallbackQueryHandler,
+)
 
 from ..core import storage
 from ..core.schema import Profile
@@ -42,9 +47,13 @@ def load_config() -> dict:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Respond to /start with a welcome message."""
+    """Respond to /start with a welcome message and inline buttons."""
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Настроить профиль", callback_data="setup_profile")]]
+    )
     await update.message.reply_text(
-        "Добро пожаловать в AI‑диетолог! Используйте /setup_profile для настройки профиля."
+        "Добро пожаловать в AI‑диетолог! Выберите действие:",
+        reply_markup=keyboard,
     )
 
 
@@ -68,9 +77,18 @@ async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         timeframe_days=0,
     )
     storage.save_profile(user_id, profile)
-    await update.message.reply_text(
-        f"Профиль создан. Целевая калорийность: {profile.norms.target_kcal} ккал."
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"Профиль создан. Целевая калорийность: {profile.norms.target_kcal} ккал.",
     )
+
+
+async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle inline keyboard button presses."""
+    query = update.callback_query
+    await query.answer()
+    if query.data == "setup_profile":
+        await setup_profile(update, context)
 
 
 def main() -> None:
@@ -84,6 +102,7 @@ def main() -> None:
     application = Application.builder().token(token).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("setup_profile", setup_profile))
+    application.add_handler(CallbackQueryHandler(handle_button_click))
     application.run_polling()
 
 
