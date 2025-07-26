@@ -73,7 +73,11 @@ def write_json(path: Path, obj: BaseModel) -> None:
     # Acquire the lock associated with this file.
     lock = FileLock(str(_lock_path(path)))
     with lock:
-        json_data = obj.model_dump_json(indent=2, ensure_ascii=False)
+        # ``model_dump_json`` already encodes Unicode characters correctly in
+        # UTF‑8, so there's no need to pass ``ensure_ascii=False``.  Older
+        # versions of Pydantic don't support that argument, so we omit it here
+        # for compatibility.
+        json_data = obj.model_dump_json(indent=2)
         path.write_text(json_data, encoding="utf-8")
 
 
