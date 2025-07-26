@@ -1,0 +1,11 @@
+{
+  "telegram_bot_token": "",
+  "openai_api_key": "",
+  "pending_check_min": 5,
+  "pending_timeout_min": 30,
+  "thresholds": {
+    "carbs_warning_g": 250,
+    "sugar_warning_g": 50,
+    "protein_min_factor": 1.6
+  }
+}
