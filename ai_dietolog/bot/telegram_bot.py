@@ -17,16 +17,18 @@ import logging
 import os
 from pathlib import Path
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
-    CallbackQueryHandler,
     ConversationHandler,
     MessageHandler,
     filters,
 )
+
+from openai import AsyncOpenAI
 
 from ..core import storage
 from ..core.schema import Profile
@@ -36,9 +38,8 @@ from ..agents.profile_collector import build_profile
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Conversation states
-(GENDER, AGE, HEIGHT, WEIGHT, GOAL, TARGET, TIMEFRAME, ACTIVITY, RESTRICTIONS,
- PREFERENCES, MEDICAL) = range(11)
+# Conversation states: collecting free-form profile and confirmation
+(DESCRIPTION, CONFIRM) = range(2)
 
 
 def load_config() -> dict:
@@ -68,155 +69,79 @@ async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if update.callback_query:
         await update.callback_query.answer()
     context.user_data.clear()
-    await update.effective_message.reply_text("Укажите ваш пол (male/female):")
-    return GENDER
-
-
-async def ask_age(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text.strip().lower()
-    if text not in {"male", "female"}:
-        await update.message.reply_text("Пожалуйста, введите male или female:")
-        return GENDER
-    context.user_data["gender"] = text
-    await update.message.reply_text("Ваш возраст (число лет):")
-    return AGE
-
-
-async def ask_height(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        age = int(update.message.text.strip())
-    except ValueError:
-        await update.message.reply_text("Возраст должен быть числом. Попробуйте ещё раз:")
-        return AGE
-    context.user_data["age"] = age
-    await update.message.reply_text("Рост в сантиметрах:")
-    return HEIGHT
-
-
-async def ask_weight(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        height = float(update.message.text.replace(",", "."))
-    except ValueError:
-        await update.message.reply_text("Введите рост числом в сантиметрах:")
-        return HEIGHT
-    context.user_data["height_cm"] = height
-    await update.message.reply_text("Текущий вес в килограммах:")
-    return WEIGHT
-
-
-async def ask_goal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        weight = float(update.message.text.replace(",", "."))
-    except ValueError:
-        await update.message.reply_text("Вес должен быть числом. Попробуйте ещё раз:")
-        return WEIGHT
-    context.user_data["weight_kg"] = weight
-    await update.message.reply_text(
-        "Цель (lose_weight / maintain / gain_weight):"
+    await update.effective_message.reply_text(
+        "Расскажите о себе: пол, возраст, рост, вес, цель и ограничения."
     )
-    return GOAL
+    return DESCRIPTION
 
 
-async def ask_target(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text.strip().lower()
-    if text not in {"lose_weight", "maintain", "gain_weight"}:
-        await update.message.reply_text(
-            "Введите lose_weight, maintain или gain_weight:"
-        )
-        return GOAL
-    context.user_data["goal_type"] = text
-    await update.message.reply_text("На сколько кг хотите изменить вес:")
-    return TARGET
+async def extract_profile(text: str, api_key: str) -> dict:
+    """Use OpenAI to extract profile fields from free-form text."""
+    client = AsyncOpenAI(api_key=api_key)
+    system = (
+        "You are a nutrition assistant. From the user's message, extract a JSON "
+        "object with the following keys: gender (male/female), age, height_cm, "
+        "weight_kg, activity_level (sedentary/moderate/high), goal_type "
+        "(lose_weight/maintain/gain_weight), target_change_kg, timeframe_days, "
+        "restrictions (list), preferences (list), medical (list)."
+    )
+    resp = await client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": text}],
+        temperature=0,
+    )
+    content = resp.choices[0].message.content
+    return json.loads(content)
 
 
-async def ask_timeframe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+def summarise_profile(data: dict) -> str:
+    """Return a human-friendly summary of extracted data."""
+    lines = [
+        f"Пол: {data.get('gender')}",
+        f"Возраст: {data.get('age')}",
+        f"Рост: {data.get('height_cm')} см",
+        f"Вес: {data.get('weight_kg')} кг",
+        f"Цель: {data.get('goal_type')}, изменение: {data.get('target_change_kg')} кг за {data.get('timeframe_days')} дн.",
+        f"Активность: {data.get('activity_level')}",
+    ]
+    if data.get("restrictions"):
+        lines.append("Непереносимости: " + ", ".join(data["restrictions"]))
+    if data.get("preferences"):
+        lines.append("Предпочтения: " + ", ".join(data["preferences"]))
+    if data.get("medical"):
+        lines.append("Медицинские ограничения: " + ", ".join(data["medical"]))
+    return "\n".join(lines)
+
+
+async def handle_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    cfg = load_config()
+    api_key = cfg.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        await update.message.reply_text("OpenAI API key не настроен")
+        return ConversationHandler.END
     try:
-        target = float(update.message.text.replace(",", "."))
-    except ValueError:
-        await update.message.reply_text("Введите число (может быть отрицательным):")
-        return TARGET
-    context.user_data["target_change_kg"] = target
-    await update.message.reply_text("За сколько дней планируете достичь цели:")
-    return TIMEFRAME
-
-
-async def ask_activity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        timeframe = int(update.message.text.strip())
-    except ValueError:
-        await update.message.reply_text("Количество дней должно быть целым числом:")
-        return TIMEFRAME
-    context.user_data["timeframe_days"] = timeframe
-    await update.message.reply_text(
-        "Уровень активности (sedentary / moderate / high):"
-    )
-    return ACTIVITY
-
-
-async def ask_restrictions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text.strip().lower()
-    if text not in {"sedentary", "moderate", "high"}:
-        await update.message.reply_text(
-            "Введите sedentary, moderate или high:" 
-        )
-        return ACTIVITY
-    context.user_data["activity_level"] = text
-    await update.message.reply_text(
-        "Непереносимости (через запятую, или 'нет'):" 
-    )
-    return RESTRICTIONS
-
-
-async def ask_preferences(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text.strip()
-    if text.lower() != "нет":
-        context.user_data["restrictions"] = [t.strip() for t in text.split(",") if t.strip()]
-    else:
-        context.user_data["restrictions"] = []
-    await update.message.reply_text(
-        "Предпочтения/нежелательные продукты (через запятую, или 'нет'):"
-    )
-    return PREFERENCES
-
-
-async def ask_medical(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text.strip()
-    if text.lower() != "нет":
-        context.user_data["preferences"] = [t.strip() for t in text.split(",") if t.strip()]
-    else:
-        context.user_data["preferences"] = []
-    await update.message.reply_text(
-        "Медицинские ограничения (через запятую, или 'нет'):"
-    )
-    return MEDICAL
+        data = await extract_profile(update.message.text, api_key)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Profile extraction failed: %s", exc)
+        await update.message.reply_text("Не удалось разобрать сообщение, попробуйте ещё раз")
+        return DESCRIPTION
+    context.user_data["profile"] = data
+    summary = summarise_profile(data)
+    await update.message.reply_text(summary + "\nВсе верно? (да/нет)")
+    return CONFIRM
 
 
 async def finish_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text.strip()
-    if text.lower() != "нет":
-        context.user_data["medical"] = [t.strip() for t in text.split(",") if t.strip()]
-    else:
-        context.user_data["medical"] = []
-
-    data = context.user_data
-    profile = build_profile(
-        gender=data["gender"],
-        age=data["age"],
-        height_cm=data["height_cm"],
-        weight_kg=data["weight_kg"],
-        activity_level=data["activity_level"],
-        goal_type=data["goal_type"],
-        target_change_kg=data["target_change_kg"],
-        timeframe_days=data["timeframe_days"],
-        restrictions=data.get("restrictions"),
-        preferences=data.get("preferences"),
-        medical=data.get("medical"),
-    )
-    storage.save_profile(update.effective_user.id, profile)
-    await update.message.reply_text(
-        f"Профиль создан. Целевая калорийность: {profile.norms.target_kcal} ккал."
-    )
-    return ConversationHandler.END
+    if update.message.text.strip().lower().startswith("д"):
+        data = context.user_data.get("profile")
+        profile = build_profile(**data)
+        storage.save_profile(update.effective_user.id, profile)
+        await update.message.reply_text(
+            f"Профиль создан. Целевая калорийность: {profile.norms.target_kcal} ккал."
+        )
+        return ConversationHandler.END
+    await update.message.reply_text("Опишите данные заново:")
+    return DESCRIPTION
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -241,17 +166,8 @@ def main() -> None:
             CallbackQueryHandler(setup_profile, pattern="^setup_profile$")
         ],
         states={
-            GENDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_age)],
-            AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_height)],
-            HEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_weight)],
-            WEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_goal)],
-            GOAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_target)],
-            TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_timeframe)],
-            TIMEFRAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_activity)],
-            ACTIVITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_restrictions)],
-            RESTRICTIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_preferences)],
-            PREFERENCES: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_medical)],
-            MEDICAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, finish_profile)],
+            DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_description)],
+            CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, finish_profile)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
