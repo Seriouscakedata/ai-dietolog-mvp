@@ -151,8 +151,28 @@ def summarise_profile(data: dict) -> str:
     return "\n".join(lines)
 
 
-def validate_mandatory(data: dict) -> str | None:
-    """Return an error message if values look unrealistic."""
+async def _ai_explain(prompt: str, api_key: str) -> str:
+    """Return a short explanation from the language model."""
+    client = AsyncOpenAI(api_key=api_key)
+    resp = await client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Ты вежливый русскоязычный ассистент-диетолог. "
+                    "Кратко поясни пользователю возникшую проблему."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.5,
+    )
+    return resp.choices[0].message.content.strip()
+
+
+async def validate_mandatory(data: dict, api_key: str) -> str | None:
+    """Return an error message if values look unrealistic.  Uses LLM for text."""
     required = [
         "age",
         "height_cm",
@@ -172,7 +192,7 @@ def validate_mandatory(data: dict) -> str | None:
             "activity_level": "уровень активности",
         }
         human = ", ".join(mapping[m] for m in missing)
-        return f"Не удалось распознать: {human}."
+        return await _ai_explain(f"Не удалось распознать: {human}.", api_key)
     try:
         age = int(data["age"])
         height = float(data["height_cm"])
@@ -180,22 +200,28 @@ def validate_mandatory(data: dict) -> str | None:
         target = float(data["target_weight_kg"])
         timeframe = int(data["timeframe_days"])
     except (TypeError, ValueError):
-        return "Проверьте вводимые числа."
+        return await _ai_explain("Проверьте вводимые числа.", api_key)
     if not 100 <= height <= 250:
-        return "Рост выглядит нереалистично."
+        return await _ai_explain("Рост выглядит нереалистично.", api_key)
     if not 30 <= weight <= 300:
-        return "Вес выглядит нереалистично."
+        return await _ai_explain("Вес выглядит нереалистично.", api_key)
     if not 10 <= age <= 100:
-        return "Возраст выглядит нереалистично."
+        return await _ai_explain("Возраст выглядит нереалистично.", api_key)
     if not 30 <= target <= 300:
-        return "Целевой вес выглядит нереалистично."
+        return await _ai_explain("Целевой вес выглядит нереалистично.", api_key)
     if timeframe <= 0:
-        return "Срок должен быть больше нуля."
+        return await _ai_explain("Срок должен быть больше нуля.", api_key)
     diff = abs(weight - target)
     max_weekly = 1.0
     weeks = timeframe / 7
     if weeks > 0 and diff / weeks > max_weekly:
-        return "Цель слишком быстрая, скорректируйте сроки или вес."
+        needed_weeks = diff / max_weekly
+        min_days = int(needed_weeks * 7)
+        prompt = (
+            "Цель слишком быстрая. Безопасный темп — не более 1 кг в неделю. "
+            f"Для выбранной цели потребуется не менее {min_days} дней."
+        )
+        return await _ai_explain(prompt, api_key)
     return None
 
 
@@ -211,7 +237,7 @@ async def collect_basic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         logger.exception("Mandatory extraction failed: %s", exc)
         await update.message.reply_text("Не удалось разобрать сообщение, попробуйте ещё раз")
         return MANDATORY
-    error = validate_mandatory(data)
+    error = await validate_mandatory(data, api_key)
     if error:
         await update.message.reply_text(error + " Попробуйте ещё раз")
         return MANDATORY
