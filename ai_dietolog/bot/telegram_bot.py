@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -102,11 +103,13 @@ async def extract_basic(text: str, api_key: str) -> dict:
     """Parse mandatory profile fields from user text."""
     system = (
         "Ты помощник диетолога. Пользователь описывает параметры на русском в "
-        "произвольной форме. Верни только JSON с полями: age, height_cm, "
-        "weight_kg, target_weight_kg, activity_level, timeframe_days, gender. "
-        "Пол gender обозначай 'male' или 'female'. Уровень активности своди к "
+        "произвольной форме. Верни ТОЛЬКО JSON со следующими полями: age, "
+        "height_cm, weight_kg, target_weight_kg, activity_level, timeframe_days, "
+        "gender. Gender указывай 'male' или 'female'. Уровень активности своди к "
         "sedentary (низкий), moderate (умеренный) или high (высокий). Если "
-        "значение отсутствует, используй null."
+        "слово содержит единицы измерения (см, кг, лет, дней), убери их и "
+        "оставь только число. Если значение не найдено, используй null. "
+        "Пример ответа: {\"age\":30,\"height_cm\":170,...}"
     )
     return await _extract(text, api_key, system)
 
@@ -115,11 +118,58 @@ async def extract_optional(text: str, api_key: str) -> dict:
     """Parse optional profile fields from user text."""
     system = (
         "Ты помощник диетолога. Пользователь может дополнить анкету произвольным "
-        "текстом. Верни только JSON с полями: gender, waist_cm, bust_cm, hips_cm, "
+        "текстом. Верни ТОЛЬКО JSON с полями: gender, waist_cm, bust_cm, hips_cm, "
         "restrictions (list), preferences (list), medical (list). Если поле не "
-        "указано, верни null или пустой список."
+        "указано, верни null или пустой список. Пол gender обозначай 'male' или "
+        "'female'."
     )
     return await _extract(text, api_key, system)
+
+
+def _heuristic_basic(text: str) -> dict:
+    """Try to extract numbers from text using simple patterns."""
+    res: dict[str, int | str] = {}
+    # возраст
+    if m := re.search(r"(\d{1,2})\s*(?:год|года|лет)", text, re.IGNORECASE):
+        res["age"] = int(m.group(1))
+    # рост
+    if m := re.search(r"рост[^\d]{0,10}(\d{3})", text, re.IGNORECASE):
+        res["height_cm"] = int(m.group(1))
+    elif m := re.search(r"(\d{3})\s*см", text, re.IGNORECASE):
+        res["height_cm"] = int(m.group(1))
+    # текущий вес
+    if m := re.search(r"вес[^\d]{0,10}(\d{2,3})", text, re.IGNORECASE):
+        res["weight_kg"] = int(m.group(1))
+    elif m := re.search(r"(\d{2,3})\s*кг", text, re.IGNORECASE):
+        res["weight_kg"] = int(m.group(1))
+    # целевой вес
+    if m := re.search(r"цел\S*[^\d]{0,10}(\d{2,3})", text, re.IGNORECASE):
+        res["target_weight_kg"] = int(m.group(1))
+    elif m := re.search(r"до\s*(\d{2,3})\s*кг", text, re.IGNORECASE):
+        res["target_weight_kg"] = int(m.group(1))
+    # период
+    if m := re.search(r"(\d+)\s*(?:дн|дней)", text, re.IGNORECASE):
+        res["timeframe_days"] = int(m.group(1))
+    elif m := re.search(r"(\d+)\s*нед", text, re.IGNORECASE):
+        res["timeframe_days"] = int(m.group(1)) * 7
+    elif m := re.search(r"(\d+)\s*мес", text, re.IGNORECASE):
+        res["timeframe_days"] = int(m.group(1)) * 30
+    # активность
+    if re.search(r"низк", text, re.IGNORECASE):
+        res["activity_level"] = "sedentary"
+    elif re.search(r"умер", text, re.IGNORECASE):
+        res["activity_level"] = "moderate"
+    elif re.search(r"высок", text, re.IGNORECASE):
+        res["activity_level"] = "high"
+    return res
+
+
+def _fill_missing_with_heuristics(data: dict, text: str) -> dict:
+    """Fill absent mandatory fields using heuristics."""
+    heur = _heuristic_basic(text)
+    for key, val in heur.items():
+        data.setdefault(key, val)
+    return data
 
 
 def summarise_profile(data: dict) -> str:
@@ -199,8 +249,11 @@ async def collect_basic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return MANDATORY
     error = validate_mandatory(data)
     if error:
-        await update.message.reply_text(error + " Попробуйте ещё раз")
-        return MANDATORY
+        data = _fill_missing_with_heuristics(data, update.message.text)
+        error = validate_mandatory(data)
+        if error:
+            await update.message.reply_text(error + " Попробуйте ещё раз")
+            return MANDATORY
     context.user_data["mandatory"] = data
     await update.message.reply_text(
         "\U0001F4DD Теперь можете указать доп. информацию: пол, окружности, предпочтения или аллергию. Если ничего добавлять не хотите, напишите 'нет'."
