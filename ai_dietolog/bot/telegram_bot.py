@@ -78,10 +78,14 @@ async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.callback_query.answer()
     context.user_data.clear()
     await update.effective_message.reply_text(
-        "\U0001F4DD Давайте составим профиль.\n"
-        "В одном сообщении опишите свой рост, вес, возраст, целевой вес, "
-        "уровень активности и желаемый срок достижения цели. "
-        "Можно отвечать в свободной форме."
+        "\U0001F4DD Давайте составим профиль. \n"
+        "Ответьте одним сообщением на вопросы:\n"
+        "1\uFE0F\u20E3 Рост (см)\n"
+        "2\uFE0F\u20E3 Вес (кг)\n"
+        "3\uFE0F\u20E3 Возраст\n"
+        "4\uFE0F\u20E3 Целевой вес\n"
+        "5\uFE0F\u20E3 Уровень активности\n"
+        "6\uFE0F\u20E3 Срок достижения цели (дни)"
     )
     return MANDATORY
 
@@ -93,7 +97,6 @@ async def _extract(text: str, api_key: str, system: str) -> dict:
         model="gpt-3.5-turbo",
         messages=[{"role": "system", "content": system}, {"role": "user", "content": text}],
         temperature=0,
-        response_format={"type": "json_object"},
     )
     return json.loads(resp.choices[0].message.content)
 
@@ -101,12 +104,9 @@ async def _extract(text: str, api_key: str, system: str) -> dict:
 async def extract_basic(text: str, api_key: str) -> dict:
     """Parse mandatory profile fields from user text."""
     system = (
-        "Ты помощник диетолога. Пользователь описывает параметры на русском в "
-        "произвольной форме. Верни только JSON с полями: age, height_cm, "
-        "weight_kg, target_weight_kg, activity_level, timeframe_days, gender. "
-        "Пол gender обозначай 'male' или 'female'. Уровень активности своди к "
-        "sedentary (низкий), moderate (умеренный) или high (высокий). Если "
-        "значение отсутствует, используй null."
+        "You are a nutrition assistant. Extract JSON with keys: age, height_cm, "
+        "weight_kg, target_weight_kg, activity_level (sedentary/moderate/high), "
+        "timeframe_days, gender. Use numbers without units and null if missing."
     )
     return await _extract(text, api_key, system)
 
@@ -114,10 +114,9 @@ async def extract_basic(text: str, api_key: str) -> dict:
 async def extract_optional(text: str, api_key: str) -> dict:
     """Parse optional profile fields from user text."""
     system = (
-        "Ты помощник диетолога. Пользователь может дополнить анкету произвольным "
-        "текстом. Верни только JSON с полями: gender, waist_cm, bust_cm, hips_cm, "
-        "restrictions (list), preferences (list), medical (list). Если поле не "
-        "указано, верни null или пустой список."
+        "You are a nutrition assistant. Extract JSON with optional keys: gender, "
+        "waist_cm, bust_cm, hips_cm, restrictions (list), preferences (list), "
+        "medical (list). Use null or empty list if not mentioned."
     )
     return await _extract(text, api_key, system)
 
@@ -126,9 +125,7 @@ def summarise_profile(data: dict) -> str:
     """Return a human-friendly summary of extracted data."""
     lines = []
     if data.get("gender"):
-        gender_map = {"male": "мужской", "female": "женский"}
-        gender_ru = gender_map.get(data["gender"], data["gender"])
-        lines.append(f"Пол: {gender_ru}")
+        lines.append(f"Пол: {data['gender']}")
     lines.extend(
         [
             f"Возраст: {data.get('age')}",
