@@ -153,9 +153,26 @@ def summarise_profile(data: dict) -> str:
 
 def validate_mandatory(data: dict) -> str | None:
     """Return an error message if values look unrealistic."""
-    required = ["age", "height_cm", "weight_kg", "target_weight_kg", "timeframe_days", "activity_level"]
-    if any(data.get(f) is None for f in required):
-        return "Не удалось распознать все значения."
+    required = [
+        "age",
+        "height_cm",
+        "weight_kg",
+        "target_weight_kg",
+        "timeframe_days",
+        "activity_level",
+    ]
+    missing = [f for f in required if data.get(f) is None]
+    if missing:
+        mapping = {
+            "age": "возраст",
+            "height_cm": "рост",
+            "weight_kg": "вес",
+            "target_weight_kg": "целевой вес",
+            "timeframe_days": "срок",
+            "activity_level": "уровень активности",
+        }
+        human = ", ".join(mapping[m] for m in missing)
+        return f"Не удалось распознать: {human}."
     try:
         age = int(data["age"])
         height = float(data["height_cm"])
