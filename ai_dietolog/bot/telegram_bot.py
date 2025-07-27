@@ -66,9 +66,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle inline keyboard button clicks."""
     query = update.callback_query
-    await query.answer()
     if query.data == "setup_profile":
         return await setup_profile(update, context)
+    await query.answer()
     return ConversationHandler.END
 
 
@@ -312,6 +312,19 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
+async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send a short AI-generated explanation of unexpected errors."""
+    logger.exception("Unhandled error: %s", context.error)
+    cfg = load_config()
+    api_key = cfg.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
+    if isinstance(update, Update) and update.effective_message and api_key:
+        try:
+            msg = await _ai_explain("Произошла техническая ошибка", api_key)
+            await update.effective_message.reply_text(msg)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Failed to send error message: %s", exc)
+
+
 def main() -> None:
     """Main entry point.  Instantiate the bot and run polling."""
     cfg = load_config()
@@ -336,6 +349,7 @@ def main() -> None:
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_button_click))
+    application.add_error_handler(handle_error)
     application.run_polling()
 
 
