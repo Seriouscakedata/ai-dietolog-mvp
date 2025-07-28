@@ -48,7 +48,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Conversation states for conversations
-(MANDATORY, OPTIONAL, CONFIRM, EDIT, MEAL_TYPE, MEAL_DESC, SET_PERCENT) = range(7)
+(MANDATORY, OPTIONAL, CONFIRM, EDIT, MEAL_TYPE, MEAL_DESC, SET_PERCENT, SET_COMMENT) = range(8)
 
 
 def load_config() -> dict:
@@ -91,14 +91,14 @@ async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.callback_query.answer()
     context.user_data.clear()
     await update.effective_message.reply_text(
-        "\U0001F4DD Давайте составим профиль. \n"
+        "\U0001f4dd Давайте составим профиль. \n"
         "Ответьте одним сообщением на вопросы:\n"
-        "1\uFE0F\u20E3 Рост (см)\n"
-        "2\uFE0F\u20E3 Вес (кг)\n"
-        "3\uFE0F\u20E3 Возраст\n"
-        "4\uFE0F\u20E3 Целевой вес\n"
-        "5\uFE0F\u20E3 Уровень активности\n"
-        "6\uFE0F\u20E3 Срок достижения цели (дни)"
+        "1\ufe0f\u20e3 Рост (см)\n"
+        "2\ufe0f\u20e3 Вес (кг)\n"
+        "3\ufe0f\u20e3 Возраст\n"
+        "4\ufe0f\u20e3 Целевой вес\n"
+        "5\ufe0f\u20e3 Уровень активности\n"
+        "6\ufe0f\u20e3 Срок достижения цели (дни)"
     )
     return MANDATORY
 
@@ -201,6 +201,23 @@ def meal_card(meal: Meal) -> str:
     )
 
 
+def meal_breakdown(meal: Meal) -> str:
+    """Return a detailed breakdown of a meal."""
+    lines = [f"{meal.type}:"]
+    for it in meal.items:
+        part = f"- {it.name}"
+        if it.weight_g:
+            part += f" {it.weight_g} г"
+        part += f" ({it.kcal} ккал, Б:{it.protein_g} г, Ж:{it.fat_g} г, У:{it.carbs_g} г)"
+        lines.append(part)
+    t = meal.total
+    lines.append(f"Итого: {t.kcal} ккал, Б:{t.protein_g} г, Ж:{t.fat_g} г, У:{t.carbs_g} г")
+    if meal.comment:
+        lines.append(f"Комментарий: {meal.comment}")
+    prefix = "Черновик: " if meal.pending else ""
+    return prefix + "\n".join(lines)
+
+
 async def _ai_explain(prompt: str, api_key: str) -> str:
     """Return a short explanation from the language model."""
     client = AsyncOpenAI(api_key=api_key)
@@ -293,7 +310,7 @@ async def collect_basic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return MANDATORY
     context.user_data["mandatory"] = data
     await update.message.reply_text(
-        "\U0001F4DD Теперь можете указать доп. информацию: пол, окружности, предпочтения или аллергию. Если ничего добавлять не хотите, напишите 'нет'."
+        "\U0001f4dd Теперь можете указать доп. информацию: пол, окружности, предпочтения или аллергию. Если ничего добавлять не хотите, напишите 'нет'."
     )
     return OPTIONAL
 
@@ -434,26 +451,33 @@ async def receive_meal_type(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
     return MEAL_DESC
 
-
-async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     desc = update.message.caption or update.message.text or ""
     image_bytes = None
+    file_id = None
     if update.message.photo:
-        file = await update.message.photo[-1].get_file()
+        photo = update.message.photo[-1]
+        file = await photo.get_file()
         image_bytes = await file.download_as_bytearray()
+        file_id = photo.file_id
     meal_type = context.user_data.get("meal_type", "Перекус")
     meal = await intake(image_bytes, desc, meal_type)
+    meal.user_desc = desc
+    meal.image_file_id = file_id
     storage.append_meal(update.effective_user.id, meal)
     keyboard = InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton("✔ Подтвердить", callback_data=f"confirm:{meal.id}"),
-                InlineKeyboardButton("✏\ufe0f Редактировать", callback_data=f"edit:{meal.id}"),
-                InlineKeyboardButton("Ὕ1 Удалить", callback_data=f"delete:{meal.id}"),
+                InlineKeyboardButton("✍️ Комментарии", callback_data=f"comment:{meal.id}"),
+                InlineKeyboardButton("🗑 Удалить", callback_data=f"delete:{meal.id}"),
             ]
         ]
     )
-    await update.message.reply_text(meal_card(meal), reply_markup=keyboard)
+    text = meal_breakdown(meal)
+    if file_id:
+        await update.message.reply_photo(photo=file_id, caption=text, reply_markup=keyboard)
+    else:
+        await update.message.reply_text(text, reply_markup=keyboard)
     return ConversationHandler.END
 
 
@@ -471,9 +495,7 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     profile = storage.load_profile(update.effective_user.id, Profile)
     cfg = load_config()
-    result = await analyze_context(
-        profile.norms.model_dump(), today.summary, meal.total, cfg
-    )
+    result = await analyze_context(profile.norms.model_dump(), today.summary, meal.total, cfg)
     meal.pending = False
     today.summary = Total(**result.get("summary", {}))
     storage.save_today(update.effective_user.id, today)
@@ -519,10 +541,66 @@ async def apply_percent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     meal.percent_eaten = percent
     if not meal.pending:
         for field in today.summary.model_fields:
-            value = getattr(today.summary, field) - getattr(old_total, field) + getattr(meal.total, field)
+            value = (
+                getattr(today.summary, field)
+                - getattr(old_total, field)
+                + getattr(meal.total, field)
+            )
             setattr(today.summary, field, value)
     storage.save_today(user_id, today)
     await update.message.reply_text("Изменено")
+    return ConversationHandler.END
+
+
+async def start_comment_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data["comment_meal_id"] = query.data.split(":", 1)[1]
+    context.user_data["comment_message"] = (query.message.chat_id, query.message.message_id)
+    await query.message.reply_text("Напишите комментарий к блюду:")
+    return SET_COMMENT
+
+
+async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+    meal_id = context.user_data.get("comment_meal_id")
+    comment = update.message.text.strip()
+    today = storage.load_today(user_id)
+    meal = next((m for m in today.meals if m.id == meal_id), None)
+    if not meal:
+        await update.message.reply_text("Запись не найдена")
+        return ConversationHandler.END
+    meal.comment = comment
+    user_desc = f"{meal.user_desc} {comment}".strip()
+    image_bytes = None
+    if meal.image_file_id:
+        file = await context.bot.get_file(meal.image_file_id)
+        image_bytes = await file.download_as_bytearray()
+    updated = await intake(image_bytes, user_desc, meal.type)
+    meal.items = updated.items
+    meal.total = updated.total
+    storage.save_today(user_id, today)
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✔ Подтвердить", callback_data=f"confirm:{meal.id}"),
+                InlineKeyboardButton("✍\ufe0f Комментарии", callback_data=f"comment:{meal.id}"),
+                InlineKeyboardButton("🗑 Удалить", callback_data=f"delete:{meal.id}"),
+            ]
+        ]
+    )
+    text = meal_breakdown(meal)
+    chat_id, msg_id = context.user_data.get(
+        "comment_message", (update.effective_chat.id, update.effective_message.message_id)
+    )
+    if meal.image_file_id:
+        await context.bot.edit_message_caption(
+            chat_id=chat_id, message_id=msg_id, caption=text, reply_markup=keyboard
+        )
+    else:
+        await context.bot.edit_message_text(
+            chat_id=chat_id, message_id=msg_id, text=text, reply_markup=keyboard
+        )
     return ConversationHandler.END
 
 
@@ -538,7 +616,9 @@ async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     if not meal.pending:
         for field in today.summary.model_fields:
-            setattr(today.summary, field, getattr(today.summary, field) - getattr(meal.total, field))
+            setattr(
+                today.summary, field, getattr(today.summary, field) - getattr(meal.total, field)
+            )
     today.meals = [m for m in today.meals if m.id != meal_id]
     storage.save_today(user_id, today)
     await query.message.edit_text("Удалено")
@@ -590,7 +670,7 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("setup_profile", setup_profile),
-            CallbackQueryHandler(setup_profile, pattern="^setup_profile$")
+            CallbackQueryHandler(setup_profile, pattern="^setup_profile$"),
         ],
         states={
             MANDATORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_basic)],
@@ -612,7 +692,9 @@ def main() -> None:
         entry_points=[CommandHandler("add_meal", add_meal)],
         states={
             MEAL_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_meal_type)],
-            MEAL_DESC: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, receive_meal_desc)],
+            MEAL_DESC: [
+                MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, receive_meal_desc)
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
@@ -625,10 +707,19 @@ def main() -> None:
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
+    comment_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_comment_meal, pattern="^comment:")],
+        states={
+            SET_COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, apply_comment)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
     application.add_handler(conv_handler)
     application.add_handler(edit_conv)
     application.add_handler(meal_conv)
     application.add_handler(edit_meal_conv)
+    application.add_handler(comment_conv)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("profile", show_profile))
     application.add_handler(CommandHandler("close_day", close_day))
