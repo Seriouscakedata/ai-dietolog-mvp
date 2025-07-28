@@ -43,8 +43,6 @@ from ..core.schema import (
     Today,
     Meal,
     Total,
-    ClosedDay,
-    History,
     HistoryMeal,
     HistoryMealEntry,
     MealBrief,
@@ -702,26 +700,6 @@ async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await query.message.edit_text("Удалено")
 
 
-async def close_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    today = storage.load_today(user_id)
-    confirmed = [m for m in today.meals if not m.pending]
-    if not confirmed:
-        await update.message.reply_text("Нет подтверждённых приёмов пищи")
-        return
-    history = storage.read_json(storage.json_path(user_id, "history.json"), History)
-    counters = storage.read_json(storage.json_path(user_id, "counters.json"), Counters)
-    closed = ClosedDay(
-        date=datetime.utcnow().date().isoformat(),
-        summary=today.summary,
-        meals=confirmed,
-    )
-    history.append_day(closed, max_days=30)
-    counters.total_days_closed += 1
-    storage.write_json(storage.json_path(user_id, "history.json"), history)
-    storage.write_json(storage.json_path(user_id, "counters.json"), counters)
-    storage.save_today(user_id, Today())
-    await update.message.reply_text("День закрыт")
 
 
 async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -895,7 +873,6 @@ def main() -> None:
     application.add_handler(comment_conv)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("profile", show_profile))
-    application.add_handler(CommandHandler("close_day", close_day))
     application.add_handler(CommandHandler("finish_day", finish_day))
     application.add_handler(CallbackQueryHandler(confirm_meal, pattern="^confirm:"))
     application.add_handler(CallbackQueryHandler(delete_meal, pattern="^delete:"))
