@@ -22,6 +22,7 @@ async def intake(
     meal_type: str,
     *,
     language: str = "ru",
+    history: Optional[list[str]] = None,
 ) -> Meal:
     """Analyse ``user_text`` describing a meal and return a ``Meal`` object."""
     client = AsyncOpenAI()
@@ -31,7 +32,19 @@ async def intake(
         language=language,
     )
 
-    messages = [{"role": "system", "content": system}]
+    messages = []
+    if history:
+        hist_text = "\n".join(history[-20:])
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "Previous conversation with the user (for context only, do not answer these):\n"
+                    f"{hist_text}\n--- End of previous messages ---"
+                ),
+            }
+        )
+    messages.append({"role": "system", "content": system})
     if image is not None:
         b64 = base64.b64encode(image).decode()
         image_url = f"data:image/jpeg;base64,{b64}"
