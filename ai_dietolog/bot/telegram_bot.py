@@ -31,13 +31,15 @@ from telegram.ext import (
 from openai import AsyncOpenAI
 
 from ..core import storage
+from ..core.schema import Profile
 from ..agents.profile_collector import build_profile
+from ..agents import profile_editor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Conversation states: mandatory questions, optional details and confirmation
-(MANDATORY, OPTIONAL, CONFIRM) = range(3)
+# Conversation states: mandatory questions, optional details, confirmation and profile editing
+(MANDATORY, OPTIONAL, CONFIRM, EDIT) = range(4)
 
 
 def load_config() -> dict:
@@ -68,6 +70,8 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     if query.data == "setup_profile":
         return await setup_profile(update, context)
+    if query.data == "edit_profile":
+        return await start_edit_profile(update, context)
     await query.answer()
     return ConversationHandler.END
 
@@ -148,6 +152,32 @@ def summarise_profile(data: dict) -> str:
         lines.append("Предпочтения: " + ", ".join(data["preferences"]))
     if data.get("medical"):
         lines.append("Медицинские ограничения: " + ", ".join(data["medical"]))
+    return "\n".join(lines)
+
+
+def summarise_profile_obj(profile: Profile) -> str:
+    """Return a concise summary of a ``Profile`` object."""
+    p = profile.personal
+    g = profile.goals
+    lines = [
+        f"Пол: {p.get('gender')}",
+        f"Возраст: {p.get('age')}",
+        f"Рост: {p.get('height_cm')} см",
+        f"Вес: {p.get('weight_kg')} кг",
+        f"Активность: {p.get('activity_level')}",
+    ]
+    goal_type = g.get("type")
+    target = g.get("target_change_kg")
+    timeframe = g.get("timeframe_days")
+    if goal_type == "lose_weight":
+        goal_desc = f"снижение на {abs(target)} кг за {timeframe} дн."
+    elif goal_type == "gain_weight":
+        goal_desc = f"набор {abs(target)} кг за {timeframe} дн."
+    else:
+        goal_desc = "поддержание веса"
+    lines.append("Цель: " + goal_desc)
+    if profile.restrictions:
+        lines.append("Ограничения: " + ", ".join(profile.restrictions))
     return "\n".join(lines)
 
 
@@ -312,6 +342,59 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
+async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Send the current profile summary with an edit button."""
+    profile = storage.load_profile(update.effective_user.id, Profile)
+    if not profile.personal:
+        await update.message.reply_text("Профиль не найден. Используйте /setup_profile.")
+        return ConversationHandler.END
+    text = summarise_profile_obj(profile)
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("\u270f\ufe0f Изменить профиль", callback_data="edit_profile")]]
+    )
+    await update.message.reply_text(text, reply_markup=keyboard)
+    return ConversationHandler.END
+
+
+async def start_edit_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Ask the user to describe profile changes."""
+    await update.callback_query.answer()
+    await update.callback_query.message.reply_text("Опишите изменения в профиле:")
+    return EDIT
+
+
+async def apply_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Update the profile via LLM and save it."""
+    cfg = load_config()
+    api_key = cfg.get("openai_api_key") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        await update.message.reply_text("OpenAI API key не настроен")
+        return ConversationHandler.END
+    profile = storage.load_profile(update.effective_user.id, Profile)
+    try:
+        updated_dict = await profile_editor.update_profile(
+            profile.model_dump(), update.message.text, api_key
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Profile update failed: %s", exc)
+        await update.message.reply_text("Не удалось обработать изменения.")
+        return ConversationHandler.END
+    try:
+        new_profile = Profile.parse_obj(updated_dict)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Profile validation failed: %s", exc)
+        await update.message.reply_text("Получены некорректные данные.")
+        return ConversationHandler.END
+    storage.save_profile(update.effective_user.id, new_profile)
+    macros = new_profile.norms.macros
+    await update.message.reply_text(
+        "Профиль обновлён. "
+        f"Целевая калорийность {new_profile.norms.target_kcal} ккал.\n"
+        f"Б: {macros['protein_g']} г, Ж: {macros['fat_g']} г, У: {macros['carbs_g']} г"
+    )
+    return ConversationHandler.END
+
+
 async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a short AI-generated explanation of unexpected errors."""
     logger.exception("Unhandled error: %s", context.error)
@@ -346,8 +429,18 @@ def main() -> None:
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
+    edit_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_edit_profile, pattern="^edit_profile$")],
+        states={
+            EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, apply_profile_edit)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
     application.add_handler(conv_handler)
+    application.add_handler(edit_conv)
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("profile", show_profile))
     application.add_handler(CallbackQueryHandler(handle_button_click))
     application.add_error_handler(handle_error)
     application.run_polling()
