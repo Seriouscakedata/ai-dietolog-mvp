@@ -38,7 +38,16 @@ from telegram.ext import (
 from openai import AsyncOpenAI
 
 from ..core import storage
-from ..core.schema import Profile, Today, Meal, Total, ClosedDay, History, Counters
+from ..core.schema import (
+    Profile,
+    Today,
+    Meal,
+    Total,
+    ClosedDay,
+    History,
+    Counters,
+    Norms,
+)
 from ..agents.profile_collector import build_profile
 from ..agents import profile_editor
 from ..agents.intake import intake
@@ -218,6 +227,28 @@ def meal_breakdown(meal: Meal) -> str:
         lines.append(f"Комментарий: {meal.comment}")
     prefix = "Черновик: " if meal.pending else ""
     return prefix + "\n".join(lines)
+
+
+def format_stats(norms: Norms, summary: Total, comment: str | None = None) -> str:
+    """Return daily progress report in Markdown with emojis."""
+
+    def line(emoji: str, label: str, value: int, target: int) -> str:
+        if target:
+            percent = int(round(value / target * 100))
+            return f"{emoji} {label}: {value} / {target} ({percent}%)"
+        return f"{emoji} {label}: {value}"
+
+    lines = [
+        "\U0001F37D *Статистика дня*",
+        line("\U0001F525", "Калории", summary.kcal, norms.target_kcal),
+        line("\U0001F357", "Белки", summary.protein_g, norms.macros.get("protein_g", 0)),
+        line("\U0001F951", "Жиры", summary.fat_g, norms.macros.get("fat_g", 0)),
+        line("\U0001F35E", "Углеводы", summary.carbs_g, norms.macros.get("carbs_g", 0)),
+    ]
+    if comment:
+        lines.append("")
+        lines.append(comment)
+    return "\n".join(lines)
 
 
 async def _ai_explain(prompt: str, api_key: str) -> str:
@@ -533,8 +564,8 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     else:
         await query.message.edit_text(meal_card(meal))
     comment = result.get("context_comment")
-    if comment:
-        await query.message.reply_text(comment)
+    stats = format_stats(profile.norms, today.summary, comment)
+    await query.message.reply_text(stats, parse_mode="Markdown")
 
 
 async def start_edit_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
