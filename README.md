@@ -21,15 +21,50 @@ ai_dietolog/
 
 Проект хранит данные каждого пользователя локально в отдельной директории `data/<tg_user_id>`.  Внутри создаются файлы `profile.json`, `today.json` и т. д. в соответствии с описанной схемой.
 
-## Быстрый старт
+## Быстрый старт на Windows
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-export OPENAI_API_KEY="sk …"
-export TELEGRAM_BOT_TOKEN="..."
-python -m bot.telegram_bot
-```
+1. Склонируйте репозиторий и перейдите в созданную директорию.
+2. Установите [Python](https://www.python.org/) 3.10+ и убедитесь, что
+   ``python`` доступен в командной строке.
+3. В ``cmd`` или PowerShell создайте виртуальное окружение и активируйте его:
+
+   **PowerShell**
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+   **cmd**
+   ```cmd
+   python -m venv .venv
+   .\.venv\Scripts\activate.bat
+   ```
+
+4. Установите зависимости:
+
+   ```
+   pip install -r requirements.txt
+   ```
+
+5. Укажите токены через переменные окружения или заполните ``config.json``.
+
+   **PowerShell**
+   ```powershell
+   $env:OPENAI_API_KEY="sk…"
+   $env:TELEGRAM_BOT_TOKEN="..."
+   ```
+
+   **cmd**
+   ```cmd
+   set OPENAI_API_KEY=sk…
+   set TELEGRAM_BOT_TOKEN=...
+   ```
+
+6. Запустите бота:
+
+   ```cmd
+   python -m ai_dietolog.bot.telegram_bot
+   ```
 
 ## Конфигурация
 
