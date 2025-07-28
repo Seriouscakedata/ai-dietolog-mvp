@@ -732,6 +732,7 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("Нет подтверждённых приёмов пищи")
         return
     profile = storage.load_profile(user_id, Profile)
+    cfg = load_config()
     meal_lines = []
     briefs = []
     for idx, meal in enumerate(confirmed, 1):
@@ -740,9 +741,17 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             f"{idx}. *{meal.type}* - {t.kcal} ккал, Б:{t.protein_g} г, "
             f"Ж:{t.fat_g} г, У:{t.carbs_g} г"
         )
-        briefs.append(MealBrief(**t.model_dump()))
+        meal_name = meal.items[0].name if meal.items else meal.user_desc
+        briefs.append(
+            MealBrief(
+                type=meal.type,
+                name=meal_name,
+                **t.model_dump(),
+            )
+        )
     stats = format_stats(profile.norms, today.summary)
     macros = profile.norms.macros
+    thresholds = cfg.get("thresholds", {})
     comments = []
     if today.summary.kcal > profile.norms.target_kcal:
         comments.append("⚠️ Калорий больше нормы")
@@ -754,7 +763,11 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         comments.append("Жиров многовато")
     if today.summary.carbs_g > macros.get("carbs_g", 0) * 1.2:
         comments.append("Углеводов многовато")
-    comment_text = "\n".join(comments)
+    if today.summary.fiber_g < profile.norms.fiber_min_g:
+        comments.append("Клетчатки мало")
+    if today.summary.sugar_g > thresholds.get("sugar_warning_g", 50):
+        comments.append("Много сахара")
+    comment_text = "\n".join(comments[:5])
 
     text = (
         "\U0001F4C5 *Итоги дня*\n" + "\n".join(meal_lines) + "\n\n" + stats

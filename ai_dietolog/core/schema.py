@@ -129,8 +129,10 @@ class History(BaseModel):
 
 
 class MealBrief(BaseModel):
-    """Simplified nutritional info for one meal."""
+    """Simplified information about one meal for history."""
 
+    type: str = ""
+    name: str = ""
     kcal: int = 0
     protein_g: int = 0
     fat_g: int = 0
