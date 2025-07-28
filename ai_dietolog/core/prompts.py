@@ -18,7 +18,8 @@ PROFILE_TO_JSON = Template(
 MEAL_JSON = Template(
     "You are a nutrition assistant. Meal type: {{ meal_type }}.\n"
     "User description: {{ user_desc }}. Use the attached image and text to\n"
-    "identify all food items. Do not guess typical foods based only on the\n"
+    "identify all food items and determine the dish name if it is obvious.\n"
+    "Do not guess typical foods based only on the\n"
     "meal type. Estimate weight in grams and macronutrients if not provided.\n"
     "Return JSON with keys 'items' and 'total' only. Each element in 'items'\n"
     "and the 'total' object MUST contain the keys name, weight_g, kcal,\n"
