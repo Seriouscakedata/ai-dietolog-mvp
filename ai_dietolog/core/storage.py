@@ -14,6 +14,7 @@ from typing import Any, Type, TypeVar
 
 from filelock import FileLock
 from pydantic import BaseModel
+from .schema import Today
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -125,3 +126,25 @@ def save_profile(user_id: str | int, profile: BaseModel) -> None:
         profile: Pydantic model representing the profile.
     """
     write_json(json_path(user_id, "profile.json"), profile)
+
+
+def today_path(user_id: str | int) -> Path:
+    """Return path to ``today.json`` for a user."""
+    return json_path(user_id, "today.json")
+
+
+def load_today(user_id: str | int) -> Today:
+    """Load today's meal log for ``user_id``."""
+    return read_json(today_path(user_id), Today)
+
+
+def save_today(user_id: str | int, today: Today) -> None:
+    """Persist today's data for ``user_id``."""
+    write_json(today_path(user_id), today)
+
+
+def append_meal(user_id: str | int, meal: BaseModel) -> None:
+    """Append a meal to ``today.json`` for the user."""
+    today = load_today(user_id)
+    today.append_meal(meal)
+    save_today(user_id, today)
