@@ -79,6 +79,30 @@ async def intake(
     if "calories" in total_raw and "kcal" not in total_raw:
         total_raw["kcal"] = total_raw.pop("calories")
 
+    for item in norm_items:
+        for key in [
+            "kcal",
+            "protein_g",
+            "fat_g",
+            "carbs_g",
+            "sugar_g",
+            "fiber_g",
+        ]:
+            val = item.get(key)
+            if isinstance(val, float):
+                item[key] = int(round(val))
+    for key in [
+        "kcal",
+        "protein_g",
+        "fat_g",
+        "carbs_g",
+        "sugar_g",
+        "fiber_g",
+    ]:
+        val = total_raw.get(key)
+        if isinstance(val, float):
+            total_raw[key] = int(round(val))
+
     try:
         items = [Item(**item) for item in norm_items]
         total = Total(**total_raw)
