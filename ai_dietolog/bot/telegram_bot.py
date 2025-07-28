@@ -451,6 +451,9 @@ async def receive_meal_type(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
     return MEAL_DESC
 
+
+async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Process a meal description and photo sent by the user."""
     desc = update.message.caption or update.message.text or ""
     image_bytes = None
     file_id = None
