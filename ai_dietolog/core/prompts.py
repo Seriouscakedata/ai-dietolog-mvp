@@ -10,3 +10,22 @@ PROFILE_TO_JSON = (
     "обновлённым JSON, соответствующим схеме Profile без лишних пояснений."
 )
 
+from jinja2 import Template
+
+# Template for meal recognition
+MEAL_JSON = Template(
+    "Ты русскоязычный ассистент-диетолог. "
+    "Тип приёма пищи: {{ meal_type }}. "
+    "Описание пользователя: {{ user_desc }}.\n"
+    "Верни JSON с ключами 'items' и 'total' без лишних пояснений."
+)
+
+# Template for contextual analysis after добавления блюда
+CONTEXT_ANALYSIS = Template(
+    "Ты анализируешь дневник питания.\n"
+    "Нормы пользователя: {{ norms }}.\n"
+    "Текущий итог дня: {{ day_summary }}.\n"
+    "Новый приём пищи: {{ new_meal }}.\n"
+    "Верни JSON с полем 'summary' (обновлённый итог) и 'context_comment'."
+)
+

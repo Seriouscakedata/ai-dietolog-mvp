@@ -16,8 +16,15 @@ import json
 import logging
 import os
 from pathlib import Path
+from datetime import datetime
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -31,15 +38,17 @@ from telegram.ext import (
 from openai import AsyncOpenAI
 
 from ..core import storage
-from ..core.schema import Profile
+from ..core.schema import Profile, Today, Meal, Total, ClosedDay, History, Counters
 from ..agents.profile_collector import build_profile
 from ..agents import profile_editor
+from ..agents.intake import intake
+from ..agents.contextual import analyze_context
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Conversation states: mandatory questions, optional details, confirmation and profile editing
-(MANDATORY, OPTIONAL, CONFIRM, EDIT) = range(4)
+# Conversation states for conversations
+(MANDATORY, OPTIONAL, CONFIRM, EDIT, MEAL_TYPE, MEAL_DESC, SET_PERCENT) = range(7)
 
 
 def load_config() -> dict:
@@ -179,6 +188,17 @@ def summarise_profile_obj(profile: Profile) -> str:
     if profile.restrictions:
         lines.append("Ограничения: " + ", ".join(profile.restrictions))
     return "\n".join(lines)
+
+
+def meal_card(meal: Meal) -> str:
+    """Return short text describing a meal."""
+    names = ", ".join(i.name for i in meal.items)
+    t = meal.total
+    prefix = "Черновик: " if meal.pending else ""
+    return (
+        f"{prefix}{meal.type}: {names}\n"
+        f"К: {t.kcal} ккал, Б: {t.protein_g} г, Ж: {t.fat_g} г, У: {t.carbs_g} г"
+    )
 
 
 async def _ai_explain(prompt: str, api_key: str) -> str:
@@ -395,6 +415,157 @@ async def apply_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 
+async def add_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start meal logging by asking for meal type."""
+    keyboard = ReplyKeyboardMarkup(
+        [["Завтрак", "Обед"], ["Ужин", "Перекус"]],
+        one_time_keyboard=True,
+        resize_keyboard=True,
+    )
+    await update.message.reply_text("Выберите тип приёма пищи:", reply_markup=keyboard)
+    return MEAL_TYPE
+
+
+async def receive_meal_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["meal_type"] = update.message.text.strip()
+    await update.message.reply_text(
+        "Пришлите фото, голосовое или текстовое описание блюда.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return MEAL_DESC
+
+
+async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    desc = update.message.caption or update.message.text or ""
+    image_bytes = None
+    if update.message.photo:
+        file = await update.message.photo[-1].get_file()
+        image_bytes = await file.download_as_bytearray()
+    meal_type = context.user_data.get("meal_type", "Перекус")
+    meal = await intake(image_bytes, desc, meal_type)
+    storage.append_meal(update.effective_user.id, meal)
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✔ Подтвердить", callback_data=f"confirm:{meal.id}"),
+                InlineKeyboardButton("✏\ufe0f Редактировать", callback_data=f"edit:{meal.id}"),
+                InlineKeyboardButton("Ὕ1 Удалить", callback_data=f"delete:{meal.id}"),
+            ]
+        ]
+    )
+    await update.message.reply_text(meal_card(meal), reply_markup=keyboard)
+    return ConversationHandler.END
+
+
+async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    meal_id = query.data.split(":", 1)[1]
+    today = storage.load_today(update.effective_user.id)
+    meal = next((m for m in today.meals if m.id == meal_id), None)
+    if not meal:
+        await query.message.reply_text("Запись не найдена")
+        return
+    if not meal.pending:
+        await query.message.reply_text("Уже подтверждено")
+        return
+    profile = storage.load_profile(update.effective_user.id, Profile)
+    cfg = load_config()
+    result = await analyze_context(
+        profile.norms.model_dump(), today.summary, meal.total, cfg
+    )
+    meal.pending = False
+    today.summary = Total(**result.get("summary", {}))
+    storage.save_today(update.effective_user.id, today)
+    await query.message.edit_text(meal_card(meal))
+    comment = result.get("context_comment")
+    if comment:
+        await query.message.reply_text(comment)
+
+
+async def start_edit_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data["edit_meal_id"] = query.data.split(":", 1)[1]
+    await query.message.reply_text("Введите процент съеденного (1-100):")
+    return SET_PERCENT
+
+
+def _scale_total(total: Total, factor: float) -> Total:
+    data = {k: int(round(getattr(total, k) * factor)) for k in total.model_fields}
+    return Total(**data)
+
+
+async def apply_percent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+    try:
+        percent = int(update.message.text)
+    except ValueError:
+        await update.message.reply_text("Введите число от 1 до 100")
+        return SET_PERCENT
+    if not 1 <= percent <= 100:
+        await update.message.reply_text("Введите число от 1 до 100")
+        return SET_PERCENT
+    meal_id = context.user_data.get("edit_meal_id")
+    today = storage.load_today(user_id)
+    meal = next((m for m in today.meals if m.id == meal_id), None)
+    if not meal:
+        await update.message.reply_text("Запись не найдена")
+        return ConversationHandler.END
+    factor = percent / meal.percent_eaten
+    old_total = meal.total
+    meal.items = [i.scale(factor) for i in meal.items]
+    meal.total = _scale_total(meal.total, factor)
+    meal.percent_eaten = percent
+    if not meal.pending:
+        for field in today.summary.model_fields:
+            value = getattr(today.summary, field) - getattr(old_total, field) + getattr(meal.total, field)
+            setattr(today.summary, field, value)
+    storage.save_today(user_id, today)
+    await update.message.reply_text("Изменено")
+    return ConversationHandler.END
+
+
+async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    meal_id = query.data.split(":", 1)[1]
+    user_id = update.effective_user.id
+    today = storage.load_today(user_id)
+    meal = next((m for m in today.meals if m.id == meal_id), None)
+    if not meal:
+        await query.message.reply_text("Запись не найдена")
+        return
+    if not meal.pending:
+        for field in today.summary.model_fields:
+            setattr(today.summary, field, getattr(today.summary, field) - getattr(meal.total, field))
+    today.meals = [m for m in today.meals if m.id != meal_id]
+    storage.save_today(user_id, today)
+    await query.message.edit_text("Удалено")
+
+
+async def close_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    today = storage.load_today(user_id)
+    confirmed = [m for m in today.meals if not m.pending]
+    if not confirmed:
+        await update.message.reply_text("Нет подтверждённых приёмов пищи")
+        return
+    history = storage.read_json(storage.json_path(user_id, "history.json"), History)
+    counters = storage.read_json(storage.json_path(user_id, "counters.json"), Counters)
+    closed = ClosedDay(
+        date=datetime.utcnow().date().isoformat(),
+        summary=today.summary,
+        meals=confirmed,
+    )
+    history.append_day(closed, max_days=30)
+    counters.total_days_closed += 1
+    storage.write_json(storage.json_path(user_id, "history.json"), history)
+    storage.write_json(storage.json_path(user_id, "counters.json"), counters)
+    storage.save_today(user_id, Today())
+    await update.message.reply_text("День закрыт")
+
+
 async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a short AI-generated explanation of unexpected errors."""
     logger.exception("Unhandled error: %s", context.error)
@@ -437,10 +608,32 @@ def main() -> None:
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
+    meal_conv = ConversationHandler(
+        entry_points=[CommandHandler("add_meal", add_meal)],
+        states={
+            MEAL_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_meal_type)],
+            MEAL_DESC: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, receive_meal_desc)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    edit_meal_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_edit_meal, pattern="^edit:")],
+        states={
+            SET_PERCENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, apply_percent)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
     application.add_handler(conv_handler)
     application.add_handler(edit_conv)
+    application.add_handler(meal_conv)
+    application.add_handler(edit_meal_conv)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("profile", show_profile))
+    application.add_handler(CommandHandler("close_day", close_day))
+    application.add_handler(CallbackQueryHandler(confirm_meal, pattern="^confirm:"))
+    application.add_handler(CallbackQueryHandler(delete_meal, pattern="^delete:"))
     application.add_handler(CallbackQueryHandler(handle_button_click))
     application.add_error_handler(handle_error)
     application.run_polling()
