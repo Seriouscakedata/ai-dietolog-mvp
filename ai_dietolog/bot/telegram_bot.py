@@ -451,6 +451,9 @@ async def add_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def receive_meal_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["meal_type"] = update.message.text.strip()
+    history = context.user_data.setdefault("history", [])
+    history.append(update.message.text.strip())
+    del history[:-20]
     await update.message.reply_text(
         "Пришлите фото, голосовое или текстовое описание блюда.",
         reply_markup=ReplyKeyboardRemove(),
@@ -461,6 +464,10 @@ async def receive_meal_type(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Process a meal description and photo sent by the user."""
     desc = update.message.caption or update.message.text or ""
+    history = context.user_data.setdefault("history", [])
+    if desc:
+        history.append(desc)
+        del history[:-20]
     image_bytes = None
     file_id = None
     if update.message.photo:
@@ -474,6 +481,7 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         desc,
         meal_type,
         language=context.user_data.get("language", "ru"),
+        history=context.user_data.get("history"),
     )
     meal.user_desc = desc
     meal.image_file_id = file_id
@@ -515,6 +523,7 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         meal.total,
         cfg,
         language=context.user_data.get("language", "ru"),
+        history=context.user_data.get("history"),
     )
     meal.pending = False
     today.summary = Total(**result.get("summary", {}))
@@ -588,6 +597,10 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     user_id = update.effective_user.id
     meal_id = context.user_data.get("comment_meal_id")
     comment = update.message.text.strip()
+    history = context.user_data.setdefault("history", [])
+    if comment:
+        history.append(comment)
+        del history[:-20]
     today = storage.load_today(user_id)
     meal = next((m for m in today.meals if m.id == meal_id), None)
     if not meal:
@@ -604,6 +617,7 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         user_desc,
         meal.type,
         language=context.user_data.get("language", "ru"),
+        history=context.user_data.get("history"),
     )
     meal.items = updated.items
     meal.total = updated.total
