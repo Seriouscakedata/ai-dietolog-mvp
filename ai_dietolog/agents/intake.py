@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import base64
 from datetime import datetime
 from uuid import uuid4
 from typing import Optional
@@ -19,9 +20,26 @@ async def intake(image: Optional[bytes], user_text: str, meal_type: str) -> Meal
     """Analyse ``user_text`` describing a meal and return a ``Meal`` object."""
     client = AsyncOpenAI()
     system = MEAL_JSON.render(meal_type=meal_type, user_desc=user_text)
+
+    messages = [{"role": "system", "content": system}]
+    if image is not None:
+        b64 = base64.b64encode(image).decode()
+        image_url = f"data:image/jpeg;base64,{b64}"
+        messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_text or ""},
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ],
+            }
+        )
+    else:
+        messages.append({"role": "user", "content": user_text})
+
     resp = await client.chat.completions.create(
         model="gpt-4o",
-        messages=[{"role": "system", "content": system}],
+        messages=messages,
         temperature=0,
         response_format={"type": "json_object"},
     )
