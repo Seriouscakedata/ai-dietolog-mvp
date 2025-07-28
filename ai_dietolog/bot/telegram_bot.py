@@ -761,24 +761,7 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Day analysis failed: %s", exc)
-        macros = profile.norms.macros
-        thresholds = cfg.get("thresholds", {})
-        comments = []
-        if today.summary.kcal > profile.norms.target_kcal:
-            comments.append("⚠️ Калорий больше нормы")
-        else:
-            comments.append("✅ Калории в норме")
-        if today.summary.protein_g < macros.get("protein_g", 0):
-            comments.append("Добавьте белка")
-        if today.summary.fat_g > macros.get("fat_g", 0) * 1.2:
-            comments.append("Жиров многовато")
-        if today.summary.carbs_g > macros.get("carbs_g", 0) * 1.2:
-            comments.append("Углеводов многовато")
-        if today.summary.fiber_g < profile.norms.fiber_min_g:
-            comments.append("Клетчатки мало")
-        if today.summary.sugar_g > thresholds.get("sugar_warning_g", 50):
-            comments.append("Много сахара")
-        comment_text = "\n".join(comments[:5])
+        comment_text = "Не удалось получить комментарии"
 
     text = (
         "\U0001F4C5 *Итоги дня*\n" + "\n".join(meal_lines) + "\n\n" + stats
