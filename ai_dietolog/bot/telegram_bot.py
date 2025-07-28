@@ -65,6 +65,7 @@ def load_config() -> dict:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Respond to /start with a welcome message and inline buttons."""
+    context.user_data["language"] = update.effective_user.language_code or "ru"
     keyboard = InlineKeyboardMarkup(
         [[InlineKeyboardButton("Настроить профиль", callback_data="setup_profile")]]
     )
@@ -90,6 +91,7 @@ async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if update.callback_query:
         await update.callback_query.answer()
     context.user_data.clear()
+    context.user_data["language"] = update.effective_user.language_code or "ru"
     await update.effective_message.reply_text(
         "\U0001f4dd Давайте составим профиль. \n"
         "Ответьте одним сообщением на вопросы:\n"
@@ -410,7 +412,10 @@ async def apply_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE)
     profile = storage.load_profile(update.effective_user.id, Profile)
     try:
         updated_dict = await profile_editor.update_profile(
-            profile.model_dump(), update.message.text, api_key
+            profile.model_dump(),
+            update.message.text,
+            api_key,
+            language=context.user_data.get("language", "ru"),
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Profile update failed: %s", exc)
@@ -434,6 +439,7 @@ async def apply_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def add_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start meal logging by asking for meal type."""
+    context.user_data["language"] = update.effective_user.language_code or "ru"
     keyboard = ReplyKeyboardMarkup(
         [["Завтрак", "Обед"], ["Ужин", "Перекус"]],
         one_time_keyboard=True,
@@ -463,7 +469,12 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         image_bytes = await file.download_as_bytearray()
         file_id = photo.file_id
     meal_type = context.user_data.get("meal_type", "Перекус")
-    meal = await intake(image_bytes, desc, meal_type)
+    meal = await intake(
+        image_bytes,
+        desc,
+        meal_type,
+        language=context.user_data.get("language", "ru"),
+    )
     meal.user_desc = desc
     meal.image_file_id = file_id
     storage.append_meal(update.effective_user.id, meal)
@@ -498,7 +509,13 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     profile = storage.load_profile(update.effective_user.id, Profile)
     cfg = load_config()
-    result = await analyze_context(profile.norms.model_dump(), today.summary, meal.total, cfg)
+    result = await analyze_context(
+        profile.norms.model_dump(),
+        today.summary,
+        meal.total,
+        cfg,
+        language=context.user_data.get("language", "ru"),
+    )
     meal.pending = False
     today.summary = Total(**result.get("summary", {}))
     storage.save_today(update.effective_user.id, today)
@@ -579,7 +596,12 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if meal.image_file_id:
         file = await context.bot.get_file(meal.image_file_id)
         image_bytes = await file.download_as_bytearray()
-    updated = await intake(image_bytes, user_desc, meal.type)
+    updated = await intake(
+        image_bytes,
+        user_desc,
+        meal.type,
+        language=context.user_data.get("language", "ru"),
+    )
     meal.items = updated.items
     meal.total = updated.total
     storage.save_today(user_id, today)

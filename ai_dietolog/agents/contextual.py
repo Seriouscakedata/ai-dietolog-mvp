@@ -14,6 +14,8 @@ async def analyze_context(
     day_summary: Total,
     new_meal_total: Total,
     cfg: dict,
+    *,
+    language: str = "ru",
 ) -> dict:
     """Return updated summary and comment for the new meal."""
     client = AsyncOpenAI(api_key=cfg.get("openai_api_key"))
@@ -21,6 +23,7 @@ async def analyze_context(
         norms=json.dumps(profile_norms, ensure_ascii=False),
         day_summary=json.dumps(day_summary.model_dump(), ensure_ascii=False),
         new_meal=json.dumps(new_meal_total.model_dump(), ensure_ascii=False),
+        language=language,
     )
     resp = await client.chat.completions.create(
         model="gpt-4o",

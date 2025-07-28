@@ -16,10 +16,20 @@ from ..core.prompts import MEAL_JSON
 from ..core.schema import Item, Meal, Total
 
 
-async def intake(image: Optional[bytes], user_text: str, meal_type: str) -> Meal:
+async def intake(
+    image: Optional[bytes],
+    user_text: str,
+    meal_type: str,
+    *,
+    language: str = "ru",
+) -> Meal:
     """Analyse ``user_text`` describing a meal and return a ``Meal`` object."""
     client = AsyncOpenAI()
-    system = MEAL_JSON.render(meal_type=meal_type, user_desc=user_text)
+    system = MEAL_JSON.render(
+        meal_type=meal_type,
+        user_desc=user_text,
+        language=language,
+    )
 
     messages = [{"role": "system", "content": system}]
     if image is not None:
@@ -50,18 +60,11 @@ async def intake(image: Optional[bytes], user_text: str, meal_type: str) -> Meal
     for it in items_raw:
         if "calories" in it and "kcal" not in it:
             it["kcal"] = it.pop("calories")
-        it.setdefault("protein_g", 0)
-        it.setdefault("fat_g", 0)
-        it.setdefault("carbs_g", 0)
-        it.setdefault("sugar_g", 0)
-        it.setdefault("fiber_g", 0)
         norm_items.append(it)
 
     total_raw = data.get("total", {})
     if "calories" in total_raw and "kcal" not in total_raw:
         total_raw["kcal"] = total_raw.pop("calories")
-    for key in ("protein_g", "fat_g", "carbs_g", "sugar_g", "fiber_g"):
-        total_raw.setdefault(key, 0)
 
     try:
         items = [Item(**item) for item in norm_items]

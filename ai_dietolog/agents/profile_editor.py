@@ -12,14 +12,23 @@ from ..core.prompts import PROFILE_TO_JSON
 logger = logging.getLogger(__name__)
 
 
-async def update_profile(existing_profile: dict, user_request: str, api_key: str) -> dict:
+async def update_profile(
+    existing_profile: dict,
+    user_request: str,
+    api_key: str,
+    *,
+    language: str = "ru",
+) -> dict:
     """Merge ``user_request`` into ``existing_profile`` using GPT-4o.
 
     The language model receives the current profile JSON and should return
     only an updated JSON object. The returned value is parsed and returned
     as a Python ``dict``.
     """
-    system = PROFILE_TO_JSON.format(profile=json.dumps(existing_profile, ensure_ascii=False))
+    system = PROFILE_TO_JSON.render(
+        profile=json.dumps(existing_profile, ensure_ascii=False),
+        language=language,
+    )
     client = AsyncOpenAI(api_key=api_key)
     resp = await client.chat.completions.create(
         model="gpt-4o",
