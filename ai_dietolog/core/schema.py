@@ -68,6 +68,9 @@ class Meal(BaseModel):
     pending: bool = True
     timestamp: datetime
     percent_eaten: int = 100
+    user_desc: str = ""
+    image_file_id: Optional[str] = None
+    comment: Optional[str] = None
 
     @validator("percent_eaten")
     def check_percent(cls, v: int) -> int:
@@ -127,7 +130,9 @@ class History(BaseModel):
 
 class Counters(BaseModel):
     total_days_closed: int = 0
-    metrics: Dict[str, Any] = Field(default_factory=lambda: {"last_metrics_day_index": 0, "metrics_interval_days": 30})
+    metrics: Dict[str, Any] = Field(
+        default_factory=lambda: {"last_metrics_day_index": 0, "metrics_interval_days": 30}
+    )
 
 
 class Norms(BaseModel):
