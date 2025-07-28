@@ -519,7 +519,10 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     meal.pending = False
     today.summary = Total(**result.get("summary", {}))
     storage.save_today(update.effective_user.id, today)
-    await query.message.edit_text(meal_card(meal))
+    if query.message.photo:
+        await query.message.edit_caption(meal_card(meal))
+    else:
+        await query.message.edit_text(meal_card(meal))
     comment = result.get("context_comment")
     if comment:
         await query.message.reply_text(comment)
@@ -590,7 +593,7 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if not meal:
         await update.message.reply_text("Запись не найдена")
         return ConversationHandler.END
-    meal.comment = comment
+    meal.comment = f"{meal.comment or ''} {comment}".strip()
     user_desc = f"{meal.user_desc} {comment}".strip()
     image_bytes = None
     if meal.image_file_id:
@@ -604,6 +607,7 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     )
     meal.items = updated.items
     meal.total = updated.total
+    meal.user_desc = user_desc
     storage.save_today(user_id, today)
     keyboard = InlineKeyboardMarkup(
         [
@@ -626,7 +630,7 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await context.bot.edit_message_text(
             chat_id=chat_id, message_id=msg_id, text=text, reply_markup=keyboard
         )
-    return ConversationHandler.END
+    return SET_COMMENT
 
 
 async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
