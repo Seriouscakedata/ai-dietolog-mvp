@@ -128,6 +128,34 @@ class History(BaseModel):
             del self.days[0]
 
 
+class MealBrief(BaseModel):
+    """Simplified nutritional info for one meal."""
+
+    kcal: int = 0
+    protein_g: int = 0
+    fat_g: int = 0
+    carbs_g: int = 0
+
+
+class HistoryMealEntry(BaseModel):
+    """Concise record of a closed day."""
+
+    date: str
+    num_meals: int
+    meals: List[MealBrief]
+    comment: str = ""
+
+
+class HistoryMeal(BaseModel):
+    days: List[HistoryMealEntry] = Field(default_factory=list)
+
+    def append_day(self, day: HistoryMealEntry, max_days: int = 30) -> None:
+        """Append an entry and truncate to ``max_days`` elements."""
+        self.days.append(day)
+        if len(self.days) > max_days:
+            del self.days[0]
+
+
 class Counters(BaseModel):
     total_days_closed: int = 0
     metrics: Dict[str, Any] = Field(

@@ -45,6 +45,9 @@ from ..core.schema import (
     Total,
     ClosedDay,
     History,
+    HistoryMeal,
+    HistoryMealEntry,
+    MealBrief,
     Counters,
     Norms,
 )
@@ -720,6 +723,95 @@ async def close_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("День закрыт")
 
 
+async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Summarise the day and ask to start a new one."""
+    user_id = update.effective_user.id
+    today = storage.load_today(user_id)
+    confirmed = [m for m in today.meals if not m.pending]
+    if not confirmed:
+        await update.message.reply_text("Нет подтверждённых приёмов пищи")
+        return
+    profile = storage.load_profile(user_id, Profile)
+    meal_lines = []
+    briefs = []
+    for idx, meal in enumerate(confirmed, 1):
+        t = meal.total
+        meal_lines.append(
+            f"{idx}. *{meal.type}* - {t.kcal} ккал, Б:{t.protein_g} г, "
+            f"Ж:{t.fat_g} г, У:{t.carbs_g} г"
+        )
+        briefs.append(MealBrief(**t.model_dump()))
+    stats = format_stats(profile.norms, today.summary)
+    macros = profile.norms.macros
+    comments = []
+    if today.summary.kcal > profile.norms.target_kcal:
+        comments.append("⚠️ Калорий больше нормы")
+    else:
+        comments.append("✅ Калории в норме")
+    if today.summary.protein_g < macros.get("protein_g", 0):
+        comments.append("Добавьте белка")
+    if today.summary.fat_g > macros.get("fat_g", 0) * 1.2:
+        comments.append("Жиров многовато")
+    if today.summary.carbs_g > macros.get("carbs_g", 0) * 1.2:
+        comments.append("Углеводов многовато")
+    comment_text = "\n".join(comments)
+
+    text = (
+        "\U0001F4C5 *Итоги дня*\n" + "\n".join(meal_lines) + "\n\n" + stats
+    )
+    if comment_text:
+        text += "\n\n" + comment_text
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+    entry = HistoryMealEntry(
+        date=datetime.utcnow().date().isoformat(),
+        num_meals=len(confirmed),
+        meals=briefs,
+        comment=comment_text,
+    )
+    context.user_data["history_entry"] = entry
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Да", callback_data="finish_yes"),
+                InlineKeyboardButton("Нет", callback_data="finish_no"),
+            ]
+        ]
+    )
+    await update.message.reply_text(
+        "Начать новый день?", reply_markup=keyboard
+    )
+
+
+async def confirm_finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle confirmation to start a new day."""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    if query.data == "finish_yes":
+        entry: HistoryMealEntry | None = context.user_data.get("history_entry")
+        if entry:
+            history = storage.read_json(
+                storage.json_path(user_id, "history_meal.json"), HistoryMeal
+            )
+            history.append_day(entry, max_days=60)
+            storage.write_json(
+                storage.json_path(user_id, "history_meal.json"), history
+            )
+        counters = storage.read_json(
+            storage.json_path(user_id, "counters.json"), Counters
+        )
+        counters.total_days_closed += 1
+        storage.write_json(
+            storage.json_path(user_id, "counters.json"), counters
+        )
+        storage.save_today(user_id, Today())
+        await query.message.edit_text("День завершён. Начинаем новый!")
+    else:
+        await query.message.edit_text("Отменено")
+    context.user_data.pop("history_entry", None)
+
+
 async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a short AI-generated explanation of unexpected errors."""
     logger.exception("Unhandled error: %s", context.error)
@@ -797,8 +889,10 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("profile", show_profile))
     application.add_handler(CommandHandler("close_day", close_day))
+    application.add_handler(CommandHandler("finish_day", finish_day))
     application.add_handler(CallbackQueryHandler(confirm_meal, pattern="^confirm:"))
     application.add_handler(CallbackQueryHandler(delete_meal, pattern="^delete:"))
+    application.add_handler(CallbackQueryHandler(confirm_finish_day, pattern="^finish_(yes|no)$"))
     application.add_handler(CallbackQueryHandler(handle_button_click))
     application.add_error_handler(handle_error)
     application.run_polling()
