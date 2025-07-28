@@ -16,11 +16,11 @@ class Item(BaseModel):
     name: str
     weight_g: Optional[int] = None
     kcal: int
-    protein_g: int = 0
-    fat_g: int = 0
-    carbs_g: int = 0
-    sugar_g: Optional[int] = 0
-    fiber_g: Optional[int] = 0
+    protein_g: Optional[int] = None
+    fat_g: Optional[int] = None
+    carbs_g: Optional[int] = None
+    sugar_g: Optional[int] = None
+    fiber_g: Optional[int] = None
 
     def scale(self, factor: float) -> "Item":
         """Return a new ``Item`` scaled by the given factor.
