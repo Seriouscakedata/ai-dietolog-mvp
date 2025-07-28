@@ -16,9 +16,9 @@ class Item(BaseModel):
     name: str
     weight_g: Optional[int] = None
     kcal: int
-    protein_g: int
-    fat_g: int
-    carbs_g: int
+    protein_g: int = 0
+    fat_g: int = 0
+    carbs_g: int = 0
     sugar_g: Optional[int] = 0
     fiber_g: Optional[int] = 0
 
