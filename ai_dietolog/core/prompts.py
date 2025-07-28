@@ -37,3 +37,14 @@ CONTEXT_ANALYSIS = Template(
     "Return JSON with 'summary' (updated totals) and 'context_comment'. The\n"
     "comment must be in {{ language }}."
 )
+
+# Template for end-of-day analysis
+DAY_ANALYSIS = Template(
+    "You are a nutrition assistant.\n"
+    "User norms: {{ norms }}.\n"
+    "Day totals: {{ summary }}.\n"
+    "Meals: {{ meals }}.\n"
+    "Provide at least 5 short comments in {{ language }} about this day's intake.\n"
+    "Focus on potential issues like excess sugar, lack of fibre or low calories.\n"
+    "Do NOT give recommendations. Format each comment on a new line starting with '-'."
+)
