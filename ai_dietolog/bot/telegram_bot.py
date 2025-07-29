@@ -681,6 +681,7 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if not meal:
         await update.message.reply_text("Запись не найдена")
         return ConversationHandler.END
+    old_total = meal.total
     meal.comment = f"{meal.comment or ''} {comment}".strip()
     user_desc = f"{meal.user_desc} {comment}".strip()
     # Refine the meal based on the comment without re-uploading the image.
@@ -695,6 +696,14 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if len(updated.items) == len(meal.items):
         meal.items = updated.items
         meal.total = updated.total
+        if not meal.pending:
+            for field in today.summary.model_fields:
+                value = (
+                    getattr(today.summary, field)
+                    - getattr(old_total, field)
+                    + getattr(meal.total, field)
+                )
+                setattr(today.summary, field, value)
     storage.save_today(user_id, today)
     keyboard = InlineKeyboardMarkup(
         [
