@@ -138,6 +138,8 @@ class MealBrief(BaseModel):
     protein_g: int = 0
     fat_g: int = 0
     carbs_g: int = 0
+    sugar_g: int = 0
+    fiber_g: int = 0
 
 
 class HistoryMealEntry(BaseModel):
