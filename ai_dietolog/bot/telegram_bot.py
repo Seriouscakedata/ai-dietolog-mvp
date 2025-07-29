@@ -25,6 +25,7 @@ from telegram import (
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
+from telegram.error import TimedOut
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -531,9 +532,15 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     file_id = None
     if update.message.photo:
         photo = update.message.photo[-1]
-        file = await photo.get_file()
-        image_bytes = await file.download_as_bytearray()
-        file_id = photo.file_id
+        try:
+            file = await photo.get_file()
+            image_bytes = await file.download_as_bytearray()
+            file_id = photo.file_id
+        except TimedOut:
+            await update.message.reply_text(
+                "Не удалось загрузить фото, попробуйте ещё раз."
+            )
+            return MEAL_DESC
     meal_type = context.user_data.get("meal_type", "Перекус")
     meal = await intake(
         image_bytes,
