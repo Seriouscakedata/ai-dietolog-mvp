@@ -81,7 +81,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [[InlineKeyboardButton("Настроить профиль", callback_data="setup_profile")]]
     )
     await update.message.reply_text(
-        "Добро пожаловать в AI‑диетолог! Выберите действие:",
+        "\U0001F44B Добро пожаловать в AI‑диетолог! Выберите действие:",
         reply_markup=keyboard,
     )
 
@@ -708,7 +708,7 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     today = storage.load_today(user_id)
     confirmed = [m for m in today.meals if not m.pending]
     if not confirmed:
-        await update.message.reply_text("Нет подтверждённых приёмов пищи")
+        await update.message.reply_text("\u274c Нет подтверждённых приёмов пищи")
         return
     profile = storage.load_profile(user_id, Profile)
     cfg = load_config()
@@ -764,7 +764,7 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         ]
     )
     await update.message.reply_text(
-        "Начать новый день?", reply_markup=keyboard
+        "Начать новый день? \U0001F305", reply_markup=keyboard
     )
 
 
@@ -791,7 +791,7 @@ async def confirm_finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE)
             storage.json_path(user_id, "counters.json"), counters
         )
         storage.save_today(user_id, Today())
-        await query.message.edit_text("День завершён. Начинаем новый!")
+        await query.message.edit_text("\U0001F389 День завершён. Начинаем новый!")
     else:
         await query.message.edit_text("Отменено")
     context.user_data.pop("history_entry", None)
