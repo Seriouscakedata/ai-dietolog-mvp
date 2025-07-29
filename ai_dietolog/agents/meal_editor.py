@@ -102,8 +102,11 @@ async def edit_meal(
         return existing_meal
 
     if len(items) != len(existing_meal.items):
-        logger.warning("Ignoring meal update due to item count mismatch")
-        return existing_meal
+        logger.info(
+            "Meal item count changed from %d to %d",
+            len(existing_meal.items),
+            len(items),
+        )
 
     return existing_meal.copy(update={
         "items": items,

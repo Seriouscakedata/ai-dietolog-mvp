@@ -39,7 +39,8 @@ UPDATE_MEAL_JSON = Template(
     "Here is the current meal JSON:\n"
     "{{ meal }}\n\n"
     "The user added a comment: '{{ comment }}'.\n"
-    "Update the JSON to reflect this comment while keeping the same number of items.\n"
+    "Update the JSON to reflect this comment. Keep the existing items if possible,\n"
+    "but you may adjust them when the comment clearly changes the dish.\n"
     "Return only the updated JSON in {{ language }} without extra explanations."
 )
 
