@@ -107,3 +107,34 @@ async def build_profile(
         metrics=metrics_cfg,
     )
     return profile
+
+
+async def recompute_profile_norms(
+    profile: Profile,
+    cfg: Optional[Dict[str, Any]] = None,
+    *,
+    language: str = "ru",
+) -> None:
+    """Recalculate and update norms for ``profile`` in-place."""
+    profile_data = {
+        **profile.personal,
+        **profile.goals,
+        "restrictions": profile.restrictions,
+        "preferences": profile.preferences,
+        "medical": profile.medical,
+    }
+    if cfg and cfg.get("use_llm_norms"):
+        norms = await compute_norms_llm(profile_data, cfg, language=language)
+    else:
+        norms_dict = logic.compute_norms(
+            gender=profile.personal.get("gender", "female"),
+            age=profile.personal.get("age"),
+            height_cm=profile.personal.get("height_cm"),
+            weight_kg=profile.personal.get("weight_kg"),
+            activity_level=profile.personal.get("activity_level"),
+            goal_type=profile.goals.get("type"),
+            target_change_kg=profile.goals.get("target_change_kg"),
+            timeframe_days=profile.goals.get("timeframe_days"),
+        )
+        norms = Norms(**norms_dict)
+    profile.norms = norms

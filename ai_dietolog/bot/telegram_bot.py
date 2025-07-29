@@ -50,7 +50,7 @@ from ..core.schema import (
     Counters,
     Norms,
 )
-from ..agents.profile_collector import build_profile
+from ..agents.profile_collector import build_profile, recompute_profile_norms
 from ..agents import profile_editor
 from ..agents.intake import intake
 from ..agents.contextual import analyze_context
@@ -78,6 +78,7 @@ MANDATORY_ORDER = [
     ("height_cm", "Укажите рост в сантиметрах:"),
     ("weight_kg", "Ваш текущий вес (кг):"),
     ("age", "Возраст:"),
+    ("gender", "Ваш пол (male/female):"),
     ("target_weight_kg", "Желаемый вес (кг):"),
     (
         "activity_level",
@@ -160,6 +161,12 @@ async def extract_field(field: str, text: str, api_key: str) -> dict:
             "You are a nutrition assistant. Interpret the user's text and "
             "return JSON with key 'activity_level' set to one of "
             "'sedentary', 'moderate' or 'high'. Use null if unclear."
+        )
+    elif field == "gender":
+        system = (
+            "You are a nutrition assistant. Determine the user's gender "
+            "from the text and return JSON with key 'gender' set to "
+            "'male' or 'female'. Use null if unclear."
         )
     else:
         system = (
@@ -328,6 +335,7 @@ async def validate_mandatory(data: dict, api_key: str) -> str | None:
         "age",
         "height_cm",
         "weight_kg",
+        "gender",
         "target_weight_kg",
         "timeframe_days",
         "activity_level",
@@ -338,6 +346,7 @@ async def validate_mandatory(data: dict, api_key: str) -> str | None:
             "age": "возраст",
             "height_cm": "рост",
             "weight_kg": "вес",
+            "gender": "пол",
             "target_weight_kg": "целевой вес",
             "timeframe_days": "срок",
             "activity_level": "уровень активности",
@@ -348,6 +357,7 @@ async def validate_mandatory(data: dict, api_key: str) -> str | None:
         age = int(data["age"])
         height = float(data["height_cm"])
         weight = float(data["weight_kg"])
+        gender = data["gender"]
         target = float(data["target_weight_kg"])
         timeframe = int(data["timeframe_days"])
     except (TypeError, ValueError):
@@ -356,6 +366,8 @@ async def validate_mandatory(data: dict, api_key: str) -> str | None:
         return await _ai_explain("Рост выглядит нереалистично.", api_key)
     if not 30 <= weight <= 300:
         return await _ai_explain("Вес выглядит нереалистично.", api_key)
+    if gender not in ("male", "female"):
+        return await _ai_explain("Укажите 'male' или 'female' для пола.", api_key)
     if not 10 <= age <= 100:
         return await _ai_explain("Возраст выглядит нереалистично.", api_key)
     if not 30 <= target <= 300:
@@ -414,7 +426,7 @@ async def collect_basic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return MANDATORY
 
     await update.message.reply_text(
-        "\U0001f4dd Теперь можете указать доп. информацию: пол, окружности, предпочтения или аллергию. Если ничего добавлять не хотите, напишите 'нет'."
+        "\U0001f4dd Теперь можете указать доп. информацию: окружности, предпочтения или аллергию. Если ничего добавлять не хотите, напишите 'нет'."
     )
     return OPTIONAL
 
@@ -542,6 +554,11 @@ async def apply_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.exception("Profile validation failed: %s", exc)
         await update.message.reply_text("Получены некорректные данные.")
         return ConversationHandler.END
+    await recompute_profile_norms(
+        new_profile,
+        cfg,
+        language=context.user_data.get("language", "ru"),
+    )
     storage.save_profile(update.effective_user.id, new_profile)
     macros = new_profile.norms.macros
     await update.message.reply_text(
