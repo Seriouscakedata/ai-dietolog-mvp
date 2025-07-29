@@ -52,3 +52,48 @@ def test_apply_comment_preserves_item_count(monkeypatch):
     assert res == bot.SET_COMMENT
     assert len(today.meals[0].items) == 1
     assert today.meals[0].total.kcal == 100
+
+
+def test_apply_comment_updates_summary(monkeypatch):
+    meal = Meal(
+        id="1",
+        type="breakfast",
+        items=[Item(name="pie", kcal=100, protein_g=10)],
+        total=Total(kcal=100, protein_g=10),
+        timestamp=datetime.utcnow(),
+        pending=False,
+    )
+    today = Today(meals=[meal], summary=Total(kcal=100, protein_g=10))
+    monkeypatch.setattr(storage, "load_today", lambda uid: today)
+    monkeypatch.setattr(storage, "save_today", lambda uid, t: None)
+
+    async def fake_edit(existing_meal, comment, *, language="ru", history=None):
+        updated = existing_meal.model_copy()
+        updated.items = [Item(name="pie+cream", kcal=150, protein_g=12)]
+        updated.total = Total(kcal=150, protein_g=12)
+        return updated
+
+    monkeypatch.setattr(bot, "edit_meal", fake_edit)
+
+    class DummyBot:
+        async def edit_message_text(self, **kwargs):
+            pass
+
+        async def edit_message_caption(self, **kwargs):
+            pass
+
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=1),
+        effective_chat=SimpleNamespace(id=2),
+        effective_message=SimpleNamespace(message_id=3),
+        message=SimpleNamespace(text="cream", reply_text=lambda *a, **k: None),
+    )
+    context = SimpleNamespace(
+        bot=DummyBot(),
+        user_data={"comment_meal_id": "1"},
+    )
+
+    res = asyncio.run(bot.apply_comment(update, context))
+    assert res == bot.SET_COMMENT
+    assert today.summary.kcal == 150
+    assert today.summary.protein_g == 12
