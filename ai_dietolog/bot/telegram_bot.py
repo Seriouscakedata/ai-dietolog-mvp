@@ -60,8 +60,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Conversation states for conversations
-(MANDATORY, OPTIONAL, CONFIRM, EDIT, MEAL_TYPE, MEAL_DESC, SET_PERCENT, SET_COMMENT) = (
-    range(8)
+(MANDATORY, OPTIONAL, CONFIRM, EDIT, MEAL_TYPE, MEAL_DESC, SET_PERCENT, SET_COMMENT, SET_CLARIFICATION) = (
+    range(9)
 )
 
 
@@ -562,11 +562,16 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if meal.clarification:
         text += f"\n\n❓ {meal.clarification}"
     if file_id:
-        await update.message.reply_photo(
+        sent = await update.message.reply_photo(
             photo=file_id, caption=text, reply_markup=keyboard
         )
     else:
-        await update.message.reply_text(text, reply_markup=keyboard)
+        sent = await update.message.reply_text(text, reply_markup=keyboard)
+
+    if meal.clarification:
+        context.user_data["comment_meal_id"] = meal.id
+        context.user_data["comment_message"] = (sent.chat_id, sent.message_id)
+        return SET_COMMENT
     return ConversationHandler.END
 
 
@@ -903,6 +908,9 @@ def main() -> None:
                 MessageHandler(
                     (filters.TEXT | filters.PHOTO) & ~filters.COMMAND, receive_meal_desc
                 )
+            ],
+            SET_COMMENT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, apply_comment)
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
