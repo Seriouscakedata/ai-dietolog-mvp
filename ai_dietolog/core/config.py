@@ -22,6 +22,13 @@ def load_config() -> dict:
 
 
 def openai_api_key() -> str:
-    """Return the configured OpenAI API key, if any."""
+    """Return the configured OpenAI API key, if any.
+
+    The function first reads ``config.json`` via :func:`load_config`.
+    If the key is missing or empty in the file, it falls back to the
+    ``OPENAI_API_KEY`` environment variable.  This mirrors the behaviour
+    used in ``telegram_bot.py`` where an empty value from ``config.json``
+    should not override a valid environment variable.
+    """
     cfg = load_config()
-    return cfg.get("openai_api_key", "")
+    return cfg.get("openai_api_key") or os.getenv("OPENAI_API_KEY", "")
