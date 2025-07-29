@@ -21,6 +21,7 @@ def test_apply_comment_updates_items(monkeypatch):
     monkeypatch.setattr(storage, "save_today", lambda uid, t: None)
 
     async def fake_edit(existing_meal, comment, *, language="ru", history=None):
+        assert "with coffee" in existing_meal.user_desc
         new_item = Item(name="coffee", kcal=20)
         updated = existing_meal.copy()
         updated.items = existing_meal.items + [new_item]
@@ -68,6 +69,7 @@ def test_apply_comment_updates_summary(monkeypatch):
     monkeypatch.setattr(storage, "save_today", lambda uid, t: None)
 
     async def fake_edit(existing_meal, comment, *, language="ru", history=None):
+        assert "cream" in existing_meal.user_desc
         updated = existing_meal.model_copy()
         updated.items = [Item(name="pie+cream", kcal=150, protein_g=12)]
         updated.total = Total(kcal=150, protein_g=12)

@@ -684,6 +684,7 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     old_total = meal.total
     meal.comment = f"{meal.comment or ''} {comment}".strip()
     user_desc = f"{meal.user_desc} {comment}".strip()
+    meal.user_desc = user_desc
     # Refine the meal based on the comment without re-uploading the image.
     updated = await edit_meal(
         meal,
@@ -691,7 +692,6 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         language=context.user_data.get("language", "ru"),
         history=context.user_data.get("history"),
     )
-    meal.user_desc = user_desc
     meal.clarification = updated.clarification
     meal.items = updated.items
     meal.total = updated.total

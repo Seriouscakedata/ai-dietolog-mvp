@@ -25,9 +25,8 @@ async def edit_meal(
     """Return an updated ``Meal`` incorporating ``comment``.
 
     The language model receives the current meal JSON and the user comment.
-    It should return JSON with the same number of items, adjusting names or
-    nutrition if needed. If parsing fails or the number of items differs from
-    the original, the original meal object is returned.
+    It should return JSON describing the updated meal. If parsing fails, the
+    original meal object is returned.
     """
     system = UPDATE_MEAL_JSON.render(
         meal=json.dumps(existing_meal.model_dump(mode="json"), ensure_ascii=False),
