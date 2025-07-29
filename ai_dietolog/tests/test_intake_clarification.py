@@ -4,14 +4,13 @@ import json
 from ai_dietolog.agents import intake as intake_module
 
 
-def test_fractional_macros_rounding(monkeypatch):
-    meal_resp = {
-        "items": [
-            {"name": "apple", "kcal": 50.5, "protein_g": 0.4, "fat_g": 0.5},
-        ],
-        "total": {"kcal": 50.5, "protein_g": 0.4, "fat_g": 0.5},
+def test_optional_clarification(monkeypatch):
+    resp = {
+        "items": [{"name": "pie", "kcal": 100}],
+        "total": {"kcal": 100},
+        "clarification": "Что за начинка у пирожка?",
     }
-    meal_json = json.dumps(meal_resp)
+    meal_json = json.dumps(resp)
 
     async def fake_create(*args, **kwargs):
         class Message:
@@ -37,13 +36,8 @@ def test_fractional_macros_rounding(monkeypatch):
     monkeypatch.setattr(intake_module, "AsyncOpenAI", lambda: FakeClient())
 
     meal = asyncio.run(
-        intake_module.intake(image=None, user_text="apple", meal_type="breakfast")
+        intake_module.intake(image=None, user_text="pie", meal_type="breakfast")
     )
-    assert meal.clarification is None
 
-    assert meal.items[0].kcal == int(round(50.5))
-    assert meal.items[0].protein_g == int(round(0.4))
-    assert meal.items[0].fat_g == int(round(0.5))
-    assert meal.total.kcal == int(round(50.5))
-    assert meal.total.protein_g == int(round(0.4))
-    assert meal.total.fat_g == int(round(0.5))
+    assert meal.clarification == "Что за начинка у пирожка?"
+    assert meal.items[0].name == "pie"

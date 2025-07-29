@@ -59,7 +59,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Conversation states for conversations
-(MANDATORY, OPTIONAL, CONFIRM, EDIT, MEAL_TYPE, MEAL_DESC, SET_PERCENT, SET_COMMENT) = range(8)
+(MANDATORY, OPTIONAL, CONFIRM, EDIT, MEAL_TYPE, MEAL_DESC, SET_PERCENT, SET_COMMENT) = (
+    range(8)
+)
 
 
 def load_config() -> dict:
@@ -86,7 +88,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def handle_button_click(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
     """Handle inline keyboard button clicks."""
     query = update.callback_query
     if query.data == "setup_profile":
@@ -121,7 +125,10 @@ async def _extract(text: str, api_key: str, system: str) -> dict:
     client = AsyncOpenAI(api_key=api_key)
     resp = await client.chat.completions.create(
         model="gpt-3.5-turbo",
-        messages=[{"role": "system", "content": system}, {"role": "user", "content": text}],
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": text},
+        ],
         temperature=0,
     )
     return json.loads(resp.choices[0].message.content)
@@ -221,10 +228,14 @@ def meal_breakdown(meal: Meal) -> str:
         part = f"- {it.name}"
         if it.weight_g:
             part += f" {it.weight_g} г"
-        part += f" ({it.kcal} ккал, Б:{it.protein_g} г, Ж:{it.fat_g} г, У:{it.carbs_g} г)"
+        part += (
+            f" ({it.kcal} ккал, Б:{it.protein_g} г, Ж:{it.fat_g} г, У:{it.carbs_g} г)"
+        )
         lines.append(part)
     t = meal.total
-    lines.append(f"Итого: {t.kcal} ккал, Б:{t.protein_g} г, Ж:{t.fat_g} г, У:{t.carbs_g} г")
+    lines.append(
+        f"Итого: {t.kcal} ккал, Б:{t.protein_g} г, Ж:{t.fat_g} г, У:{t.carbs_g} г"
+    )
     if meal.comment:
         lines.append(f"Комментарий: {meal.comment}")
     prefix = "Черновик: " if meal.pending else ""
@@ -241,11 +252,13 @@ def format_stats(norms: Norms, summary: Total, comment: str | None = None) -> st
         return f"{emoji} {label}: {value}"
 
     lines = [
-        "\U0001F37D *Статистика дня*",
-        line("\U0001F525", "Калории", summary.kcal, norms.target_kcal),
-        line("\U0001F357", "Белки", summary.protein_g, norms.macros.get("protein_g", 0)),
-        line("\U0001F951", "Жиры", summary.fat_g, norms.macros.get("fat_g", 0)),
-        line("\U0001F35E", "Углеводы", summary.carbs_g, norms.macros.get("carbs_g", 0)),
+        "\U0001f37d *Статистика дня*",
+        line("\U0001f525", "Калории", summary.kcal, norms.target_kcal),
+        line(
+            "\U0001f357", "Белки", summary.protein_g, norms.macros.get("protein_g", 0)
+        ),
+        line("\U0001f951", "Жиры", summary.fat_g, norms.macros.get("fat_g", 0)),
+        line("\U0001f35e", "Углеводы", summary.carbs_g, norms.macros.get("carbs_g", 0)),
     ]
     if comment:
         lines.append("")
@@ -337,7 +350,9 @@ async def collect_basic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         data = await extract_basic(update.message.text, api_key)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Mandatory extraction failed: %s", exc)
-        await update.message.reply_text("Не удалось разобрать сообщение, попробуйте ещё раз")
+        await update.message.reply_text(
+            "Не удалось разобрать сообщение, попробуйте ещё раз"
+        )
         return MANDATORY
     error = await validate_mandatory(data, api_key)
     if error:
@@ -364,7 +379,9 @@ async def collect_optional(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             data = await extract_optional(text, api_key)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Optional extraction failed: %s", exc)
-            await update.message.reply_text("Не удалось разобрать сообщение, попробуйте ещё раз")
+            await update.message.reply_text(
+                "Не удалось разобрать сообщение, попробуйте ещё раз"
+            )
             return OPTIONAL
     context.user_data["optional"] = data
     merged = {**context.user_data.get("mandatory", {}), **data}
@@ -418,11 +435,19 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     """Send the current profile summary with an edit button."""
     profile = storage.load_profile(update.effective_user.id, Profile)
     if not profile.personal:
-        await update.message.reply_text("Профиль не найден. Используйте /setup_profile.")
+        await update.message.reply_text(
+            "Профиль не найден. Используйте /setup_profile."
+        )
         return ConversationHandler.END
     text = summarise_profile_obj(profile)
     keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("\u270f\ufe0f Изменить профиль", callback_data="edit_profile")]]
+        [
+            [
+                InlineKeyboardButton(
+                    "\u270f\ufe0f Изменить профиль", callback_data="edit_profile"
+                )
+            ]
+        ]
     )
     await update.message.reply_text(text, reply_markup=keyboard)
     return ConversationHandler.END
@@ -522,15 +547,23 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     keyboard = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✔ Подтвердить", callback_data=f"confirm:{meal.id}"),
-                InlineKeyboardButton("✍️ Комментарии", callback_data=f"comment:{meal.id}"),
+                InlineKeyboardButton(
+                    "✔ Подтвердить", callback_data=f"confirm:{meal.id}"
+                ),
+                InlineKeyboardButton(
+                    "✍️ Комментарии", callback_data=f"comment:{meal.id}"
+                ),
                 InlineKeyboardButton("🗑 Удалить", callback_data=f"delete:{meal.id}"),
             ]
         ]
     )
     text = meal_breakdown(meal)
+    if meal.clarification:
+        text += f"\n\n❓ {meal.clarification}"
     if file_id:
-        await update.message.reply_photo(photo=file_id, caption=text, reply_markup=keyboard)
+        await update.message.reply_photo(
+            photo=file_id, caption=text, reply_markup=keyboard
+        )
     else:
         await update.message.reply_text(text, reply_markup=keyboard)
     return ConversationHandler.END
@@ -626,7 +659,10 @@ async def start_comment_meal(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     context.user_data["comment_meal_id"] = query.data.split(":", 1)[1]
-    context.user_data["comment_message"] = (query.message.chat_id, query.message.message_id)
+    context.user_data["comment_message"] = (
+        query.message.chat_id,
+        query.message.message_id,
+    )
     await query.message.reply_text("Напишите комментарий к блюду:")
     return SET_COMMENT
 
@@ -660,19 +696,27 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     meal.items = updated.items
     meal.total = updated.total
     meal.user_desc = user_desc
+    meal.clarification = updated.clarification
     storage.save_today(user_id, today)
     keyboard = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✔ Подтвердить", callback_data=f"confirm:{meal.id}"),
-                InlineKeyboardButton("✍\ufe0f Комментарии", callback_data=f"comment:{meal.id}"),
+                InlineKeyboardButton(
+                    "✔ Подтвердить", callback_data=f"confirm:{meal.id}"
+                ),
+                InlineKeyboardButton(
+                    "✍\ufe0f Комментарии", callback_data=f"comment:{meal.id}"
+                ),
                 InlineKeyboardButton("🗑 Удалить", callback_data=f"delete:{meal.id}"),
             ]
         ]
     )
     text = meal_breakdown(meal)
+    if meal.clarification:
+        text += f"\n\n❓ {meal.clarification}"
     chat_id, msg_id = context.user_data.get(
-        "comment_message", (update.effective_chat.id, update.effective_message.message_id)
+        "comment_message",
+        (update.effective_chat.id, update.effective_message.message_id),
     )
     if meal.image_file_id:
         await context.bot.edit_message_caption(
@@ -698,13 +742,13 @@ async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not meal.pending:
         for field in today.summary.model_fields:
             setattr(
-                today.summary, field, getattr(today.summary, field) - getattr(meal.total, field)
+                today.summary,
+                field,
+                getattr(today.summary, field) - getattr(meal.total, field),
             )
     today.meals = [m for m in today.meals if m.id != meal_id]
     storage.save_today(user_id, today)
     await query.message.edit_text("Удалено")
-
-
 
 
 async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -725,7 +769,9 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             f"{idx}. *{meal.type}* - {t.kcal} ккал, Б:{t.protein_g} г, "
             f"Ж:{t.fat_g} г, У:{t.carbs_g} г"
         )
-        meal_name = meal.items[0].name if meal.items else meal.user_desc
+        meal_name = (
+            ", ".join(it.name for it in meal.items) if meal.items else meal.user_desc
+        )
         briefs.append(
             MealBrief(
                 type=meal.type,
@@ -745,10 +791,7 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     except Exception as exc:  # noqa: BLE001
         logger.exception("Day analysis failed: %s", exc)
 
-
-    text = (
-        "\U0001F4C5 *Итоги дня*\n" + "\n".join(meal_lines) + "\n\n" + stats
-    )
+    text = "\U0001f4c5 *Итоги дня*\n" + "\n".join(meal_lines) + "\n\n" + stats
     if comment_text:
         text += "\n\n" + comment_text
     await update.message.reply_text(text, parse_mode="Markdown")
@@ -768,12 +811,12 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             ]
         ]
     )
-    await update.message.reply_text(
-        "Начать новый день?", reply_markup=keyboard
-    )
+    await update.message.reply_text("Начать новый день?", reply_markup=keyboard)
 
 
-async def confirm_finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def confirm_finish_day(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Handle confirmation to start a new day."""
     query = update.callback_query
     await query.answer()
@@ -785,16 +828,12 @@ async def confirm_finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 storage.json_path(user_id, "history_meal.json"), HistoryMeal
             )
             history.append_day(entry, max_days=60)
-            storage.write_json(
-                storage.json_path(user_id, "history_meal.json"), history
-            )
+            storage.write_json(storage.json_path(user_id, "history_meal.json"), history)
         counters = storage.read_json(
             storage.json_path(user_id, "counters.json"), Counters
         )
         counters.total_days_closed += 1
-        storage.write_json(
-            storage.json_path(user_id, "counters.json"), counters
-        )
+        storage.write_json(storage.json_path(user_id, "counters.json"), counters)
         storage.save_today(user_id, Today())
         await query.message.edit_text("День завершён. Начинаем новый!")
     else:
@@ -830,14 +869,18 @@ def main() -> None:
         ],
         states={
             MANDATORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_basic)],
-            OPTIONAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_optional)],
+            OPTIONAL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, collect_optional)
+            ],
             CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, finish_profile)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
     edit_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(start_edit_profile, pattern="^edit_profile$")],
+        entry_points=[
+            CallbackQueryHandler(start_edit_profile, pattern="^edit_profile$")
+        ],
         states={
             EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, apply_profile_edit)],
         },
@@ -847,9 +890,13 @@ def main() -> None:
     meal_conv = ConversationHandler(
         entry_points=[CommandHandler("add_meal", add_meal)],
         states={
-            MEAL_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_meal_type)],
+            MEAL_TYPE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_meal_type)
+            ],
             MEAL_DESC: [
-                MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, receive_meal_desc)
+                MessageHandler(
+                    (filters.TEXT | filters.PHOTO) & ~filters.COMMAND, receive_meal_desc
+                )
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
@@ -858,7 +905,9 @@ def main() -> None:
     edit_meal_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_edit_meal, pattern="^edit:")],
         states={
-            SET_PERCENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, apply_percent)],
+            SET_PERCENT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, apply_percent)
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
@@ -866,7 +915,9 @@ def main() -> None:
     comment_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_comment_meal, pattern="^comment:")],
         states={
-            SET_COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, apply_comment)],
+            SET_COMMENT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, apply_comment)
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
@@ -881,7 +932,9 @@ def main() -> None:
     application.add_handler(CommandHandler("finish_day", finish_day))
     application.add_handler(CallbackQueryHandler(confirm_meal, pattern="^confirm:"))
     application.add_handler(CallbackQueryHandler(delete_meal, pattern="^delete:"))
-    application.add_handler(CallbackQueryHandler(confirm_finish_day, pattern="^finish_(yes|no)$"))
+    application.add_handler(
+        CallbackQueryHandler(confirm_finish_day, pattern="^finish_(yes|no)$")
+    )
     application.add_handler(CallbackQueryHandler(handle_button_click))
     application.add_error_handler(handle_error)
     application.run_polling()

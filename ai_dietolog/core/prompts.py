@@ -17,15 +17,18 @@ PROFILE_TO_JSON = Template(
 # Template for meal recognition
 MEAL_JSON = Template(
     "You are a nutrition assistant. Meal type: {{ meal_type }}.\n"
-    "User description: {{ user_desc }}. Use the attached image and text to\n"
+    "User description: {{ user_desc }}. Use the attached image and text to"
     "identify all food items and determine the dish name if it is obvious.\n"
-    "Do not guess typical foods based only on the\n"
+    "Do not guess typical foods based only on the"
     "meal type. Estimate weight in grams and macronutrients if not provided.\n"
-    "Return JSON with keys 'items' and 'total' only. Each element in 'items'\n"
-    "and the 'total' object MUST contain the keys name, weight_g, kcal,\n"
-    "protein_g, fat_g, carbs_g, sugar_g and fiber_g. Use the key 'kcal' and\n"
-    "never 'calories'. Any item names or other human-readable text must be in\n"
-    "{{ language }}."
+    "If you are unsure about details that may change calories (for example the"
+    " filling of pies), add a key 'clarification' with a short question for the"
+    " user.\n"
+    "Return JSON with keys 'items', 'total' and optionally 'clarification'. Each"
+    " element in 'items' and the 'total' object MUST contain the keys name,"
+    " weight_g, kcal, protein_g, fat_g, carbs_g, sugar_g and fiber_g. Use the"
+    " key 'kcal' and never 'calories'. Any item names or other human-readable"
+    " text must be in {{ language }}."
 )
 
 # Template for contextual analysis after добавления блюда
