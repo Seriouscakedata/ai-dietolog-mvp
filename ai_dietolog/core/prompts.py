@@ -33,6 +33,16 @@ MEAL_JSON = Template(
     " text must be in {{ language }}."
 )
 
+# Template for refining a meal with additional comments
+UPDATE_MEAL_JSON = Template(
+    "You are a nutrition assistant.\n"
+    "Here is the current meal JSON:\n"
+    "{{ meal }}\n\n"
+    "The user added a comment: '{{ comment }}'.\n"
+    "Update the JSON to reflect this comment while keeping the same number of items.\n"
+    "Return only the updated JSON in {{ language }} without extra explanations."
+)
+
 # Template for contextual analysis after добавления блюда
 CONTEXT_ANALYSIS = Template(
     "You analyse the food diary.\n"
