@@ -172,12 +172,20 @@ class Counters(BaseModel):
 
 
 class Norms(BaseModel):
-    BMR_kcal: int
-    TDEE_kcal: int
-    target_kcal: int
-    macros: Dict[str, int]
-    fiber_min_g: int
-    water_min_ml: int
+    """Nutritional norms calculated for a user."""
+
+    BMR_kcal: int = 0
+    TDEE_kcal: int = 0
+    target_kcal: int = 0
+    macros: Dict[str, int] = Field(
+        default_factory=lambda: {
+            "protein_g": 0,
+            "fat_g": 0,
+            "carbs_g": 0,
+        }
+    )
+    fiber_min_g: int = 0
+    water_min_ml: int = 0
 
 
 class MetricsCfg(BaseModel):
