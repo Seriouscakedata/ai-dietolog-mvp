@@ -8,7 +8,7 @@ def test_optional_clarification(monkeypatch):
     resp = {
         "items": [{"name": "pie", "kcal": 100}],
         "total": {"kcal": 100},
-        "clarification": "Что за начинка у пирожка?",
+        "clarification": "Что за начинка у пирожка? (опционально)",
     }
     meal_json = json.dumps(resp)
 
@@ -39,5 +39,5 @@ def test_optional_clarification(monkeypatch):
         intake_module.intake(image=None, user_text="pie", meal_type="breakfast")
     )
 
-    assert meal.clarification == "Что за начинка у пирожка?"
+    assert meal.clarification == "Что за начинка у пирожка? (опционально)"
     assert meal.items[0].name == "pie"
