@@ -61,9 +61,30 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Conversation states for conversations
-(MANDATORY, OPTIONAL, CONFIRM, EDIT, MEAL_TYPE, MEAL_DESC, SET_PERCENT, SET_COMMENT, SET_CLARIFICATION) = (
-    range(9)
-)
+(
+    MANDATORY,
+    OPTIONAL,
+    CONFIRM,
+    EDIT,
+    MEAL_TYPE,
+    MEAL_DESC,
+    SET_PERCENT,
+    SET_COMMENT,
+    SET_CLARIFICATION,
+) = range(9)
+
+# Order of mandatory profile questions for step-by-step filling
+MANDATORY_ORDER = [
+    ("height_cm", "Укажите рост в сантиметрах:"),
+    ("weight_kg", "Ваш текущий вес (кг):"),
+    ("age", "Возраст:"),
+    ("target_weight_kg", "Желаемый вес (кг):"),
+    (
+        "activity_level",
+        "Уровень активности (sedentary/moderate/high):",
+    ),
+    ("timeframe_days", "За сколько дней хотите достичь цели?"),
+]
 
 
 def load_config() -> dict:
@@ -109,16 +130,12 @@ async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.callback_query.answer()
     context.user_data.clear()
     context.user_data["language"] = update.effective_user.language_code or "ru"
+    context.user_data["mandatory"] = {}
+    context.user_data["step"] = 0
     await update.effective_message.reply_text(
-        "\U0001f4dd Давайте составим профиль. \n"
-        "Ответьте одним сообщением на вопросы:\n"
-        "1\ufe0f\u20e3 Рост (см)\n"
-        "2\ufe0f\u20e3 Вес (кг)\n"
-        "3\ufe0f\u20e3 Возраст\n"
-        "4\ufe0f\u20e3 Целевой вес\n"
-        "5\ufe0f\u20e3 Уровень активности\n"
-        "6\ufe0f\u20e3 Срок достижения цели (дни)"
+        "\U0001f4dd Давайте составим профиль. Ответьте на несколько вопросов."
     )
+    await update.effective_message.reply_text(MANDATORY_ORDER[0][1])
     return MANDATORY
 
 
@@ -134,6 +151,23 @@ async def _extract(text: str, api_key: str, system: str) -> dict:
         temperature=0,
     )
     return json.loads(resp.choices[0].message.content)
+
+
+async def extract_field(field: str, text: str, api_key: str) -> dict:
+    """Extract a single profile field from ``text`` using OpenAI."""
+    if field == "activity_level":
+        system = (
+            "You are a nutrition assistant. Interpret the user's text and "
+            "return JSON with key 'activity_level' set to one of "
+            "'sedentary', 'moderate' or 'high'. Use null if unclear."
+        )
+    else:
+        system = (
+            f"You are a nutrition assistant. Extract a numeric value for '{field}' "
+            "from the user's text. Return JSON with this key and omit any units. "
+            "Use null if not mentioned."
+        )
+    return await _extract(text, api_key, system)
 
 
 async def extract_basic(text: str, api_key: str) -> dict:
@@ -348,19 +382,37 @@ async def collect_basic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if not api_key:
         await update.message.reply_text("OpenAI API key не настроен")
         return ConversationHandler.END
+
+    step = context.user_data.get("step", 0)
+    field, _prompt = MANDATORY_ORDER[step]
     try:
-        data = await extract_basic(update.message.text, api_key)
+        data = await extract_field(field, update.message.text, api_key)
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Mandatory extraction failed: %s", exc)
-        await update.message.reply_text(
-            "Не удалось разобрать сообщение, попробуйте ещё раз"
-        )
+        logger.exception("Field extraction failed: %s", exc)
+        await update.message.reply_text("Не удалось разобрать, попробуйте ещё раз")
         return MANDATORY
-    error = await validate_mandatory(data, api_key)
+
+    value = data.get(field)
+    if value is None:
+        await update.message.reply_text("Не удалось распознать ответ, повторите")
+        return MANDATORY
+
+    context.user_data["mandatory"][field] = value
+    step += 1
+    if step < len(MANDATORY_ORDER):
+        context.user_data["step"] = step
+        await update.message.reply_text(MANDATORY_ORDER[step][1])
+        return MANDATORY
+
+    # all fields collected
+    error = await validate_mandatory(context.user_data["mandatory"], api_key)
     if error:
-        await update.message.reply_text(error + " Попробуйте ещё раз")
+        await update.message.reply_text(error + " Попробуйте заново")
+        context.user_data["mandatory"] = {}
+        context.user_data["step"] = 0
+        await update.message.reply_text(MANDATORY_ORDER[0][1])
         return MANDATORY
-    context.user_data["mandatory"] = data
+
     await update.message.reply_text(
         "\U0001f4dd Теперь можете указать доп. информацию: пол, окружности, предпочтения или аллергию. Если ничего добавлять не хотите, напишите 'нет'."
     )
