@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from pathlib import Path
 from datetime import datetime
 
 from telegram import (
@@ -39,6 +38,7 @@ from telegram.ext import (
 from openai import AsyncOpenAI
 
 from ..core import storage
+from ..core.config import load_config
 from ..core.schema import (
     Profile,
     Today,
@@ -85,18 +85,6 @@ MANDATORY_ORDER = [
     ),
     ("timeframe_days", "За сколько дней хотите достичь цели?"),
 ]
-
-
-def load_config() -> dict:
-    """Load configuration from config.json or environment variables."""
-    cfg_path = Path(__file__).resolve().parent.parent / "config.json"
-    if cfg_path.exists():
-        with cfg_path.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    return {
-        "telegram_bot_token": os.getenv("TELEGRAM_BOT_TOKEN", ""),
-        "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
-    }
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

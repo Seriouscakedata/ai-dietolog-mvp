@@ -7,6 +7,8 @@ import logging
 from typing import Optional
 
 from openai import AsyncOpenAI
+
+from ..core.config import openai_api_key
 from pydantic import ValidationError
 
 from ..core.prompts import UPDATE_MEAL_JSON
@@ -35,7 +37,7 @@ async def edit_meal(
         comment=comment,
         language=language,
     )
-    client = AsyncOpenAI()
+    client = AsyncOpenAI(api_key=openai_api_key())
     messages = []
     if history:
         hist_text = "\n".join(history[-20:])

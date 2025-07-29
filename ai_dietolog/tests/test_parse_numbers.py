@@ -39,7 +39,7 @@ def test_intake_units(monkeypatch):
         "total": {"kcal": "150 ккал", "protein_g": "5 г"},
     }
     meal_json = json.dumps(resp, ensure_ascii=False)
-    monkeypatch.setattr(intake_module, "AsyncOpenAI", lambda: _fake_client(meal_json))
+    monkeypatch.setattr(intake_module, "AsyncOpenAI", lambda *a, **k: _fake_client(meal_json))
 
     meal = asyncio.run(
         intake_module.intake(image=None, user_text="cake", meal_type="snack")
@@ -62,7 +62,7 @@ def test_edit_meal_units(monkeypatch):
         "total": {"kcal": "120 ккал"},
     }
     meal_json = json.dumps(resp, ensure_ascii=False)
-    monkeypatch.setattr(editor_module, "AsyncOpenAI", lambda: _fake_client(meal_json))
+    monkeypatch.setattr(editor_module, "AsyncOpenAI", lambda *a, **k: _fake_client(meal_json))
 
     updated = asyncio.run(editor_module.edit_meal(existing, "more"))
 
