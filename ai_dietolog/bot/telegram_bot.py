@@ -739,7 +739,7 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Day analysis failed: %s", exc)
-        comment_text = "Не удалось получить комментарии"
+
 
     text = (
         "\U0001F4C5 *Итоги дня*\n" + "\n".join(meal_lines) + "\n\n" + stats
