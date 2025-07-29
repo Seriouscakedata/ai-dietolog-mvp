@@ -7,13 +7,15 @@ from typing import Optional
 
 from openai import AsyncOpenAI
 
+from ..core.config import openai_api_key
+
 from ..core.prompts import AI_NORMS
 from ..core.schema import Norms
 
 
 async def compute_norms_llm(profile_data: dict, cfg: dict, *, language: str = "ru") -> Norms:
     """Return ``Norms`` calculated by a language model."""
-    client = AsyncOpenAI(api_key=cfg.get("openai_api_key"))
+    client = AsyncOpenAI(api_key=cfg.get("openai_api_key") or openai_api_key())
     system = AI_NORMS.render(
         profile=json.dumps(profile_data, ensure_ascii=False),
         language=language,
