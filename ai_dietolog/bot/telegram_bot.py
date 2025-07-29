@@ -693,17 +693,16 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     )
     meal.user_desc = user_desc
     meal.clarification = updated.clarification
-    if len(updated.items) == len(meal.items):
-        meal.items = updated.items
-        meal.total = updated.total
-        if not meal.pending:
-            for field in today.summary.model_fields:
-                value = (
-                    getattr(today.summary, field)
-                    - getattr(old_total, field)
-                    + getattr(meal.total, field)
-                )
-                setattr(today.summary, field, value)
+    meal.items = updated.items
+    meal.total = updated.total
+    if not meal.pending:
+        for field in today.summary.model_fields:
+            value = (
+                getattr(today.summary, field)
+                - getattr(old_total, field)
+                + getattr(meal.total, field)
+            )
+            setattr(today.summary, field, value)
     storage.save_today(user_id, today)
     keyboard = InlineKeyboardMarkup(
         [

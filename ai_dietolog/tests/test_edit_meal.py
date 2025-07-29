@@ -7,7 +7,7 @@ from ai_dietolog.core.schema import Item, Meal, Total, Today
 from ai_dietolog.core import storage
 
 
-def test_apply_comment_preserves_item_count(monkeypatch):
+def test_apply_comment_updates_items(monkeypatch):
     meal = Meal(
         id="1",
         type="breakfast",
@@ -21,7 +21,6 @@ def test_apply_comment_preserves_item_count(monkeypatch):
     monkeypatch.setattr(storage, "save_today", lambda uid, t: None)
 
     async def fake_edit(existing_meal, comment, *, language="ru", history=None):
-        # Return a meal with an extra item which should be ignored
         new_item = Item(name="coffee", kcal=20)
         updated = existing_meal.copy()
         updated.items = existing_meal.items + [new_item]
@@ -51,8 +50,8 @@ def test_apply_comment_preserves_item_count(monkeypatch):
     res = asyncio.run(bot.apply_comment(update, context))
     from telegram.ext import ConversationHandler
     assert res == ConversationHandler.END
-    assert len(today.meals[0].items) == 1
-    assert today.meals[0].total.kcal == 100
+    assert len(today.meals[0].items) == 2
+    assert today.meals[0].total.kcal == 120
 
 
 def test_apply_comment_updates_summary(monkeypatch):
