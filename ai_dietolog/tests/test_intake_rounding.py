@@ -34,7 +34,7 @@ def test_fractional_macros_rounding(monkeypatch):
                 "Chat", (), {"completions": type("Comp", (), {"create": fake_create})()}
             )()
 
-    monkeypatch.setattr(intake_module, "AsyncOpenAI", lambda: FakeClient())
+    monkeypatch.setattr(intake_module, "AsyncOpenAI", lambda *a, **k: FakeClient())
 
     meal = asyncio.run(
         intake_module.intake(image=None, user_text="apple", meal_type="breakfast")

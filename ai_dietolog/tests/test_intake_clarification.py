@@ -33,7 +33,7 @@ def test_optional_clarification(monkeypatch):
                 "Chat", (), {"completions": type("Comp", (), {"create": fake_create})()}
             )()
 
-    monkeypatch.setattr(intake_module, "AsyncOpenAI", lambda: FakeClient())
+    monkeypatch.setattr(intake_module, "AsyncOpenAI", lambda *a, **k: FakeClient())
 
     meal = asyncio.run(
         intake_module.intake(image=None, user_text="pie", meal_type="breakfast")
