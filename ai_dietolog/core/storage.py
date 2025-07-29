@@ -55,7 +55,13 @@ def read_json(path: Path, model_cls: Type[T]) -> T:
     lock = FileLock(str(_lock_path(path)))
     with lock:
         contents = path.read_text(encoding="utf-8")
-    return model_cls.model_validate_json(contents)
+    # Handle empty or corrupted files gracefully by returning a default instance
+    if not contents.strip():
+        return model_cls()  # type: ignore[arg-type]
+    try:
+        return model_cls.model_validate_json(contents)
+    except Exception:
+        return model_cls()  # type: ignore[arg-type]
 
 
 def write_json(path: Path, obj: BaseModel) -> None:
