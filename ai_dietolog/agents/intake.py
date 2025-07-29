@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from ..core.prompts import MEAL_JSON
 from ..core.schema import Item, Meal, Total
+from ..core.utils import parse_int
 
 
 async def intake(
@@ -94,9 +95,9 @@ async def intake(
             "sugar_g",
             "fiber_g",
         ]:
-            val = item.get(key)
-            if isinstance(val, float):
-                item[key] = int(round(val))
+            val = parse_int(item.get(key))
+            if val is not None:
+                item[key] = val
     for key in [
         "kcal",
         "protein_g",
@@ -105,9 +106,9 @@ async def intake(
         "sugar_g",
         "fiber_g",
     ]:
-        val = total_raw.get(key)
-        if isinstance(val, float):
-            total_raw[key] = int(round(val))
+        val = parse_int(total_raw.get(key))
+        if val is not None:
+            total_raw[key] = val
 
     try:
         items = [Item(**item) for item in norm_items]

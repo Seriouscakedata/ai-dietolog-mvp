@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from ..core.prompts import UPDATE_MEAL_JSON
 from ..core.schema import Item, Meal, Total
+from ..core.utils import parse_int
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +80,9 @@ async def edit_meal(
             "sugar_g",
             "fiber_g",
         ]:
-            val = item.get(key)
-            if isinstance(val, float):
-                item[key] = int(round(val))
+            val = parse_int(item.get(key))
+            if val is not None:
+                item[key] = val
     for key in [
         "kcal",
         "protein_g",
@@ -90,9 +91,9 @@ async def edit_meal(
         "sugar_g",
         "fiber_g",
     ]:
-        val = total_raw.get(key)
-        if isinstance(val, float):
-            total_raw[key] = int(round(val))
+        val = parse_int(total_raw.get(key))
+        if val is not None:
+            total_raw[key] = val
 
     try:
         items = [Item(**it) for it in items_raw]
