@@ -682,12 +682,11 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
     meal.comment = f"{meal.comment or ''} {comment}".strip()
     user_desc = f"{meal.user_desc} {comment}".strip()
-    image_bytes = None
-    if meal.image_file_id:
-        file = await context.bot.get_file(meal.image_file_id)
-        image_bytes = await file.download_as_bytearray()
+    # Do not resend the photo when refining the meal with a comment.  The
+    # comment should only adjust the textual description, so the image is not
+    # downloaded or passed to the intake agent again.
     updated = await intake(
-        image_bytes,
+        None,
         user_desc,
         meal.type,
         language=context.user_data.get("language", "ru"),
