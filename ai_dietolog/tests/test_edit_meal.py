@@ -49,7 +49,8 @@ def test_apply_comment_preserves_item_count(monkeypatch):
     )
 
     res = asyncio.run(bot.apply_comment(update, context))
-    assert res == bot.SET_COMMENT
+    from telegram.ext import ConversationHandler
+    assert res == ConversationHandler.END
     assert len(today.meals[0].items) == 1
     assert today.meals[0].total.kcal == 100
 
@@ -94,6 +95,7 @@ def test_apply_comment_updates_summary(monkeypatch):
     )
 
     res = asyncio.run(bot.apply_comment(update, context))
-    assert res == bot.SET_COMMENT
+    from telegram.ext import ConversationHandler
+    assert res == ConversationHandler.END
     assert today.summary.kcal == 150
     assert today.summary.protein_g == 12
