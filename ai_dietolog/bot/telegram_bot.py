@@ -612,16 +612,12 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if meal.clarification:
         text += f"\n\n❓ {meal.clarification}"
     if file_id:
-        sent = await update.message.reply_photo(
+        await update.message.reply_photo(
             photo=file_id, caption=text, reply_markup=keyboard
         )
     else:
-        sent = await update.message.reply_text(text, reply_markup=keyboard)
+        await update.message.reply_text(text, reply_markup=keyboard)
 
-    if meal.clarification:
-        context.user_data["comment_meal_id"] = meal.id
-        context.user_data["comment_message"] = (sent.chat_id, sent.message_id)
-        return SET_COMMENT
     return ConversationHandler.END
 
 

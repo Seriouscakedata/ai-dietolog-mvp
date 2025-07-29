@@ -50,7 +50,8 @@ def test_receive_meal_asks_for_clarification(monkeypatch):
     context = SimpleNamespace(user_data={})
 
     res = asyncio.run(bot.receive_meal_desc(update, context))
-    assert res == bot.SET_COMMENT
-    assert context.user_data["comment_meal_id"] == "1"
-    assert context.user_data["comment_message"] == (2, 3)
+    from telegram.ext import ConversationHandler
+    assert res == ConversationHandler.END
+    assert "comment_meal_id" not in context.user_data
+    assert "comment_message" not in context.user_data
 
