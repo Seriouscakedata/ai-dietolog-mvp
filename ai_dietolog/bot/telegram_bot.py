@@ -99,7 +99,7 @@ async def handle_button_click(
     if query.data == "edit_profile":
         return await start_edit_profile(update, context)
     await query.answer()
-    return ConversationHandler.END
+    return SET_COMMENT
 
 
 async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -733,7 +733,7 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await context.bot.edit_message_text(
             chat_id=chat_id, message_id=msg_id, text=text, reply_markup=keyboard
         )
-    return SET_COMMENT
+    return ConversationHandler.END
 
 
 async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

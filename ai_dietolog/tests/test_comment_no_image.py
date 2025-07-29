@@ -49,4 +49,5 @@ def test_apply_comment_without_image(monkeypatch):
     )
 
     res = asyncio.run(bot.apply_comment(update, context))
-    assert res == bot.SET_COMMENT
+    from telegram.ext import ConversationHandler
+    assert res == ConversationHandler.END
