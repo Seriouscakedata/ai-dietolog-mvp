@@ -560,12 +560,17 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
     meal.pending = False
     today.summary = Total(**result.get("summary", {}))
+    comment = result.get("context_comment")
+    if comment:
+        meal.comment = f"{meal.comment or ''} {comment}".strip()
+        history = context.user_data.setdefault("history", [])
+        history.append(comment)
+        del history[:-20]
     storage.save_today(update.effective_user.id, today)
     if query.message.photo:
         await query.message.edit_caption(meal_card(meal))
     else:
         await query.message.edit_text(meal_card(meal))
-    comment = result.get("context_comment")
     stats = format_stats(profile.norms, today.summary, comment)
     await query.message.reply_text(stats, parse_mode="Markdown")
 
