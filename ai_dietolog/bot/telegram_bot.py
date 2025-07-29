@@ -43,8 +43,6 @@ from ..core.schema import (
     Today,
     Meal,
     Total,
-    ClosedDay,
-    History,
     HistoryMeal,
     HistoryMealEntry,
     MealBrief,
@@ -702,26 +700,6 @@ async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await query.message.edit_text("Удалено")
 
 
-async def close_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    today = storage.load_today(user_id)
-    confirmed = [m for m in today.meals if not m.pending]
-    if not confirmed:
-        await update.message.reply_text("Нет подтверждённых приёмов пищи")
-        return
-    history = storage.read_json(storage.json_path(user_id, "history.json"), History)
-    counters = storage.read_json(storage.json_path(user_id, "counters.json"), Counters)
-    closed = ClosedDay(
-        date=datetime.utcnow().date().isoformat(),
-        summary=today.summary,
-        meals=confirmed,
-    )
-    history.append_day(closed, max_days=30)
-    counters.total_days_closed += 1
-    storage.write_json(storage.json_path(user_id, "history.json"), history)
-    storage.write_json(storage.json_path(user_id, "counters.json"), counters)
-    storage.save_today(user_id, Today())
-    await update.message.reply_text("День закрыт")
 
 
 async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -761,24 +739,7 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Day analysis failed: %s", exc)
-        macros = profile.norms.macros
-        thresholds = cfg.get("thresholds", {})
-        comments = []
-        if today.summary.kcal > profile.norms.target_kcal:
-            comments.append("⚠️ Калорий больше нормы")
-        else:
-            comments.append("✅ Калории в норме")
-        if today.summary.protein_g < macros.get("protein_g", 0):
-            comments.append("Добавьте белка")
-        if today.summary.fat_g > macros.get("fat_g", 0) * 1.2:
-            comments.append("Жиров многовато")
-        if today.summary.carbs_g > macros.get("carbs_g", 0) * 1.2:
-            comments.append("Углеводов многовато")
-        if today.summary.fiber_g < profile.norms.fiber_min_g:
-            comments.append("Клетчатки мало")
-        if today.summary.sugar_g > thresholds.get("sugar_warning_g", 50):
-            comments.append("Много сахара")
-        comment_text = "\n".join(comments[:5])
+
 
     text = (
         "\U0001F4C5 *Итоги дня*\n" + "\n".join(meal_lines) + "\n\n" + stats
@@ -912,7 +873,6 @@ def main() -> None:
     application.add_handler(comment_conv)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("profile", show_profile))
-    application.add_handler(CommandHandler("close_day", close_day))
     application.add_handler(CommandHandler("finish_day", finish_day))
     application.add_handler(CallbackQueryHandler(confirm_meal, pattern="^confirm:"))
     application.add_handler(CallbackQueryHandler(delete_meal, pattern="^delete:"))
