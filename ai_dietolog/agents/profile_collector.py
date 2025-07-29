@@ -15,9 +15,10 @@ from typing import Any, Dict, List, Optional
 
 from ..core import logic
 from ..core.schema import MetricsCfg, Norms, Profile
+from .norms_ai import compute_norms_llm
 
 
-def build_profile(
+async def build_profile(
     *,
     gender: str,
     age: int,
@@ -31,6 +32,8 @@ def build_profile(
     preferences: Optional[List[str]] = None,
     medical: Optional[List[str]] = None,
     metrics_interval_days: Optional[int] = None,
+    cfg: Optional[Dict[str, Any]] = None,
+    language: str = "ru",
 ) -> Profile:
     """Construct a ``Profile`` from questionnaire answers.
 
@@ -47,22 +50,40 @@ def build_profile(
         preferences: List of food dislikes (can be empty or None).
         medical: List of medical conditions (can be empty or None).
         metrics_interval_days: Optional override for metrics logging interval.
+        cfg: Optional configuration dict. When it contains ``use_llm_norms`` set
+            to true, nutritional norms are computed via OpenAI.
+        language: Language for AI responses if LLM is used.
 
     Returns:
         A fully populated ``Profile`` instance.
     """
-    # Compute norms based on the personal data and goals.
-    norms_dict = logic.compute_norms(
-        gender=gender,
-        age=age,
-        height_cm=height_cm,
-        weight_kg=weight_kg,
-        activity_level=activity_level,
-        goal_type=goal_type,
-        target_change_kg=target_change_kg,
-        timeframe_days=timeframe_days,
-    )
-    norms = Norms(**norms_dict)
+    profile_data = {
+        "gender": gender,
+        "age": age,
+        "height_cm": height_cm,
+        "weight_kg": weight_kg,
+        "activity_level": activity_level,
+        "goal_type": goal_type,
+        "target_change_kg": target_change_kg,
+        "timeframe_days": timeframe_days,
+        "restrictions": restrictions or [],
+        "preferences": preferences or [],
+        "medical": medical or [],
+    }
+    if cfg and cfg.get("use_llm_norms"):
+        norms = await compute_norms_llm(profile_data, cfg, language=language)
+    else:
+        norms_dict = logic.compute_norms(
+            gender=gender,
+            age=age,
+            height_cm=height_cm,
+            weight_kg=weight_kg,
+            activity_level=activity_level,
+            goal_type=goal_type,
+            target_change_kg=target_change_kg,
+            timeframe_days=timeframe_days,
+        )
+        norms = Norms(**norms_dict)
     metrics_cfg = MetricsCfg()
     if metrics_interval_days is not None:
         metrics_cfg.metrics_interval_days = metrics_interval_days

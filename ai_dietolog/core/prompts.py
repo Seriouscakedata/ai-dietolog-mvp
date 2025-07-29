@@ -64,3 +64,15 @@ DAY_ANALYSIS = Template(
     "Focus on potential issues like excess sugar, lack of fibre or low calories.\n"
     "Do NOT give recommendations. Format each comment on a new line starting with '-'."
 )
+
+# Template for calculating norms via LLM
+AI_NORMS = Template(
+    "You are a nutrition expert. Based on the following user data, "
+    "calculate basal metabolic rate, daily energy expenditure and a suitable "
+    "target calorie intake. Consider any listed medical conditions or dietary "
+    "restrictions.\n"
+    "{{ profile }}\n\n"
+    "Return JSON with keys 'BMR_kcal', 'TDEE_kcal', 'target_kcal', "
+    "'macros' (with 'protein_g', 'fat_g', 'carbs_g'), 'fiber_min_g' and "
+    "'water_min_ml'. Any human text must be in {{ language }}."
+)

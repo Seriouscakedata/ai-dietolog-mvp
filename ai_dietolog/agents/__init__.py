@@ -5,6 +5,7 @@ from . import (
     contextual,
     intake,
     profile_collector,
+    norms_ai,
     profile_editor,
     meal_editor,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "contextual",
     "intake",
     "profile_collector",
+    "norms_ai",
     "profile_editor",
     "meal_editor",
 ]
