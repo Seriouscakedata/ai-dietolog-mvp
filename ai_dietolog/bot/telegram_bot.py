@@ -54,6 +54,7 @@ from ..agents import profile_editor
 from ..agents.intake import intake
 from ..agents.contextual import analyze_context
 from ..agents.daily_review import analyze_day as analyze_day_summary
+from ..agents.meal_editor import edit_meal
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -682,20 +683,18 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return ConversationHandler.END
     meal.comment = f"{meal.comment or ''} {comment}".strip()
     user_desc = f"{meal.user_desc} {comment}".strip()
-    # Do not resend the photo when refining the meal with a comment.  The
-    # comment should only adjust the textual description, so the image is not
-    # downloaded or passed to the intake agent again.
-    updated = await intake(
-        None,
-        user_desc,
-        meal.type,
+    # Refine the meal based on the comment without re-uploading the image.
+    updated = await edit_meal(
+        meal,
+        comment,
         language=context.user_data.get("language", "ru"),
         history=context.user_data.get("history"),
     )
-    meal.items = updated.items
-    meal.total = updated.total
     meal.user_desc = user_desc
     meal.clarification = updated.clarification
+    if len(updated.items) == len(meal.items):
+        meal.items = updated.items
+        meal.total = updated.total
     storage.save_today(user_id, today)
     keyboard = InlineKeyboardMarkup(
         [
