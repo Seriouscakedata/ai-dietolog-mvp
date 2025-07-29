@@ -7,6 +7,8 @@ from typing import Optional, Sequence
 
 from openai import AsyncOpenAI
 
+from ..core.config import openai_api_key
+
 from ..core.prompts import DAY_ANALYSIS
 from ..core.schema import MealBrief, Total
 
@@ -22,7 +24,7 @@ async def analyze_day(
 ) -> str:
     """Return bullet point comments about the day."""
 
-    client = AsyncOpenAI(api_key=cfg.get("openai_api_key"))
+    client = AsyncOpenAI(api_key=cfg.get("openai_api_key") or openai_api_key())
     system = DAY_ANALYSIS.render(
         norms=json.dumps(profile_norms, ensure_ascii=False),
         summary=json.dumps(summary.model_dump(), ensure_ascii=False),

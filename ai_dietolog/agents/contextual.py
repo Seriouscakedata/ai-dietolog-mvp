@@ -6,6 +6,8 @@ import json
 from typing import Optional
 from openai import AsyncOpenAI
 
+from ..core.config import openai_api_key
+
 from ..core.prompts import CONTEXT_ANALYSIS
 from ..core.schema import Total
 
@@ -20,7 +22,7 @@ async def analyze_context(
     history: Optional[list[str]] = None,
 ) -> dict:
     """Return updated summary and comment for the new meal."""
-    client = AsyncOpenAI(api_key=cfg.get("openai_api_key"))
+    client = AsyncOpenAI(api_key=cfg.get("openai_api_key") or openai_api_key())
     system = CONTEXT_ANALYSIS.render(
         norms=json.dumps(profile_norms, ensure_ascii=False),
         day_summary=json.dumps(day_summary.model_dump(), ensure_ascii=False),
