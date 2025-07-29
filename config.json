@@ -1,6 +1,7 @@
 {
   "telegram_bot_token": "",
   "openai_api_key": "",
+  "use_llm_norms": false,
   "pending_check_min": 5,
   "pending_timeout_min": 30,
   "thresholds": {

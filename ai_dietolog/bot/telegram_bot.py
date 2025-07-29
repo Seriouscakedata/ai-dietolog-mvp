@@ -455,7 +455,8 @@ async def finish_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             goal_type = "lose_weight"
         elif target_change < 0:
             goal_type = "gain_weight"
-        profile = build_profile(
+        cfg = load_config()
+        profile = await build_profile(
             gender=gender,
             age=int(data["age"]),
             height_cm=float(data["height_cm"]),
@@ -467,6 +468,8 @@ async def finish_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             restrictions=data.get("restrictions"),
             preferences=data.get("preferences"),
             medical=data.get("medical"),
+            cfg=cfg,
+            language=context.user_data.get("language", "ru"),
         )
         for key in ("waist_cm", "bust_cm", "hips_cm"):
             if data.get(key) is not None:
