@@ -1,6 +1,18 @@
 {
   "telegram_bot_token": "",
   "openai_api_key": "",
+  "gemini_api_key": "",
+  "llm_provider": "openai",
+  "agents": {
+    "extract": {"model": "gpt-3.5-turbo"},
+    "ai_explain": {"model": "gpt-3.5-turbo"},
+    "intake": {"model": "gpt-4o"},
+    "meal_editor": {"model": "gpt-4o"},
+    "contextual": {"model": "gpt-4o"},
+    "daily_review": {"model": "gpt-4o"},
+    "norms_ai": {"model": "gpt-4o"},
+    "profile_editor": {"model": "gpt-4o"}
+  },
   "use_llm_norms": false,
   "pending_check_min": 5,
   "pending_timeout_min": 30,

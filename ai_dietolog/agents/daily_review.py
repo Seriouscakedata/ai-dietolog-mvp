@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from typing import Optional, Sequence
 
-from openai import AsyncOpenAI
-
-from ..core.config import openai_api_key
+from ..core.llm import ask_llm
+from openai import AsyncOpenAI  # noqa: F401
+from ..core.config import openai_api_key, load_config, agent_llm
 
 from ..core.prompts import DAY_ANALYSIS
 from ..core.schema import MealBrief, Total
@@ -24,7 +24,6 @@ async def analyze_day(
 ) -> str:
     """Return bullet point comments about the day."""
 
-    client = AsyncOpenAI(api_key=cfg.get("openai_api_key") or openai_api_key())
     system = DAY_ANALYSIS.render(
         norms=json.dumps(profile_norms, ensure_ascii=False),
         summary=json.dumps(summary.model_dump(), ensure_ascii=False),
@@ -44,9 +43,22 @@ async def analyze_day(
             }
         )
     messages.append({"role": "system", "content": system})
-    resp = await client.chat.completions.create(
-        model="gpt-4o",
-        messages=messages,
-        temperature=0.3,
-    )
-    return resp.choices[0].message.content.strip()
+    cfg = {**load_config(), **cfg}
+    provider, model = agent_llm("daily_review", cfg)
+    if provider == "openai":
+        client = AsyncOpenAI(api_key=cfg.get("openai_api_key") or openai_api_key())
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.3,
+        )
+        text = resp.choices[0].message.content
+    else:
+        text = await ask_llm(
+            messages,
+            model=model,
+            provider=provider,
+            temperature=0.3,
+            cfg=cfg,
+        )
+    return text.strip()

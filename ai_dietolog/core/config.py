@@ -6,7 +6,13 @@ import json
 import os
 from pathlib import Path
 
-__all__ = ["load_config", "openai_api_key"]
+__all__ = [
+    "load_config",
+    "openai_api_key",
+    "gemini_api_key",
+    "llm_provider",
+    "agent_llm",
+]
 
 
 def load_config() -> dict:
@@ -18,6 +24,8 @@ def load_config() -> dict:
     return {
         "telegram_bot_token": os.getenv("TELEGRAM_BOT_TOKEN", ""),
         "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
+        "gemini_api_key": os.getenv("GEMINI_API_KEY", ""),
+        "llm_provider": os.getenv("LLM_PROVIDER", "openai"),
     }
 
 
@@ -32,3 +40,26 @@ def openai_api_key() -> str:
     """
     cfg = load_config()
     return cfg.get("openai_api_key") or os.getenv("OPENAI_API_KEY", "")
+
+
+def gemini_api_key() -> str:
+    """Return the configured Gemini API key."""
+    cfg = load_config()
+    return cfg.get("gemini_api_key") or os.getenv("GEMINI_API_KEY", "")
+
+
+def llm_provider() -> str:
+    """Return the default LLM provider."""
+    cfg = load_config()
+    return cfg.get("llm_provider") or os.getenv("LLM_PROVIDER", "openai")
+
+
+def agent_llm(name: str, cfg: dict | None = None) -> tuple[str, str]:
+    """Return provider and model for the given agent."""
+    cfg = cfg or load_config()
+    agent_cfg = cfg.get("agents", {}).get(name, {})
+    provider = agent_cfg.get("provider") or cfg.get("llm_provider", "openai")
+    model = agent_cfg.get("model")
+    if not model:
+        model = "gpt-3.5-turbo" if provider == "openai" else "gemini-pro"
+    return provider, model
