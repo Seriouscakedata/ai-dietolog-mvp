@@ -1,0 +1,122 @@
+profile_to_json:
+  description: |
+    Update a user's profile JSON with their request and return only the updated JSON.
+  template: |
+    You are a nutrition assistant.
+    Below is the user's current profile JSON:
+    {{ profile }}
+
+    Update this profile according to the user's request and reply ONLY with
+    the updated JSON that matches the Profile schema without any extra
+    explanations. Any human-readable text must be in {{ language }}.
+
+meal_json:
+  description: |
+    Recognise a meal from text and an optional image and return all food items and totals.
+  template: |
+    You are a nutrition assistant. Meal type: {{ meal_type }}.
+    User description: {{ user_desc }}. Use the attached image and text to
+    identify all food items and determine the dish name if it is obvious.
+    Always count visible pieces or servings and mention this quantity in the
+    item name (e.g. '2 cookies'). Estimate the portion weight in grams for
+    each item using your culinary knowledge.
+    Do not guess typical foods based only on the meal type.
+    If you are unsure about details that may change calories (for example the
+    filling of pies), add a key 'clarification' with a short question for the
+    user followed by ' (опционально)'.
+    Return JSON with keys 'items', 'total' and optionally 'clarification'. Each
+    element in 'items' and the 'total' object MUST contain the keys name,
+    weight_g, kcal, protein_g, fat_g, carbs_g, sugar_g and fiber_g. Use the
+    key 'kcal' and never 'calories'. Any item names or other human-readable
+    text must be in {{ language }}.
+
+update_meal_json:
+  description: |
+    Adjust an existing meal JSON based on a user's additional comment.
+  template: |
+    You are a nutrition assistant.
+    Here is the current meal JSON with its nutrition data:
+    {{ meal }}
+
+    Original user description: '{{ user_desc }}'.
+    The user added a new comment: '{{ comment }}'.
+    Recalculate the meal according to this comment, updating all nutrition
+    values if they change. Keep the existing items when possible but adjust
+    them if the comment clearly alters the dish.
+    Return only the updated JSON in {{ language }} without extra explanations.
+
+context_analysis:
+  description: |
+    Update the day summary with the new meal and provide a short contextual comment.
+  template: |
+    You analyse the food diary.
+    User norms: {{ norms }}.
+    Current day summary: {{ day_summary }}.
+    New meal: {{ new_meal }}.
+    Return JSON with 'summary' (updated totals) and 'context_comment'. The
+    comment must be in {{ language }}.
+
+day_analysis:
+  description: |
+    Give short bullet point feedback about the day's intake.
+  template: |
+    You are a nutrition assistant.
+    User norms: {{ norms }}.
+    Day totals: {{ summary }}.
+    Meals: {{ meals }}.
+    Provide at least 5 short comments in {{ language }} about this day's intake.
+    Focus on potential issues like excess sugar, lack of fibre or low calories.
+    Do NOT give recommendations. Format each comment on a new line starting with '-'.
+
+ai_norms:
+  description: |
+    Calculate nutrition norms such as BMR and target calories from profile data.
+  template: |
+    You are a nutrition expert. Based on the following user data,
+    calculate basal metabolic rate, daily energy expenditure and a suitable
+    target calorie intake. Consider any listed medical conditions or dietary
+    restrictions.
+    {{ profile }}
+
+    Return JSON with keys 'BMR_kcal', 'TDEE_kcal', 'target_kcal',
+    'macros' (with 'protein_g', 'fat_g', 'carbs_g'), 'fiber_min_g' and
+    'water_min_ml'. Any human text must be in {{ language }}.
+
+ai_explain:
+  description: |
+    Short polite explanation shown to the user when validation fails.
+  template: |
+    Ты вежливый русскоязычный ассистент-диетолог.
+    Кратко поясни пользователю возникшую проблему.
+
+extract_field_activity:
+  description: |
+    Parse user's text and return the activity level as 'sedentary', 'moderate' or 'high'.
+  template: |
+    You are a nutrition assistant. Interpret the user's text and
+    return JSON with key 'activity_level' set to one of
+    'sedentary', 'moderate' or 'high'. Use null if unclear.
+
+extract_field_numeric:
+  description: |
+    Extract a numeric value for a given field from the user's text.
+  template: |
+    You are a nutrition assistant. Extract a numeric value for '{{ field }}'
+    from the user's text. Return JSON with this key and omit any units.
+    Use null if not mentioned.
+
+extract_basic:
+  description: |
+    Parse mandatory profile fields from free-form text.
+  template: |
+    You are a nutrition assistant. Extract JSON with keys: age, height_cm,
+    weight_kg, target_weight_kg, activity_level (sedentary/moderate/high),
+    timeframe_days, gender. Use numbers without units and null if missing.
+
+extract_optional:
+  description: |
+    Parse optional profile fields from free-form text.
+  template: |
+    You are a nutrition assistant. Extract JSON with optional keys: gender,
+    waist_cm, bust_cm, hips_cm, restrictions (list), preferences (list),
+    medical (list). Use null or empty list if not mentioned.

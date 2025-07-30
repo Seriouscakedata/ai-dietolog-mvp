@@ -47,6 +47,13 @@ from ..agents.profile_collector import build_profile
 from ..core import storage
 from ..core.config import agent_llm, load_config
 from ..core.llm import ask_llm, check_llm_connectivity
+from ..core.prompts import (
+    EXTRACT_FIELD_ACTIVITY,
+    EXTRACT_FIELD_NUMERIC,
+    EXTRACT_BASIC,
+    EXTRACT_OPTIONAL,
+    AI_EXPLAIN,
+)
 from ..core.schema import (
     Counters,
     HistoryMeal,
@@ -162,37 +169,21 @@ async def _extract(text: str, api_key: str, system: str) -> dict:
 async def extract_field(field: str, text: str, api_key: str) -> dict:
     """Extract a single profile field from ``text`` using OpenAI."""
     if field == "activity_level":
-        system = (
-            "You are a nutrition assistant. Interpret the user's text and "
-            "return JSON with key 'activity_level' set to one of "
-            "'sedentary', 'moderate' or 'high'. Use null if unclear."
-        )
+        system = EXTRACT_FIELD_ACTIVITY.render()
     else:
-        system = (
-            f"You are a nutrition assistant. Extract a numeric value for '{field}' "
-            "from the user's text. Return JSON with this key and omit any units. "
-            "Use null if not mentioned."
-        )
+        system = EXTRACT_FIELD_NUMERIC.render(field=field)
     return await _extract(text, api_key, system)
 
 
 async def extract_basic(text: str, api_key: str) -> dict:
     """Parse mandatory profile fields from user text."""
-    system = (
-        "You are a nutrition assistant. Extract JSON with keys: age, height_cm, "
-        "weight_kg, target_weight_kg, activity_level (sedentary/moderate/high), "
-        "timeframe_days, gender. Use numbers without units and null if missing."
-    )
+    system = EXTRACT_BASIC.render()
     return await _extract(text, api_key, system)
 
 
 async def extract_optional(text: str, api_key: str) -> dict:
     """Parse optional profile fields from user text."""
-    system = (
-        "You are a nutrition assistant. Extract JSON with optional keys: gender, "
-        "waist_cm, bust_cm, hips_cm, restrictions (list), preferences (list), "
-        "medical (list). Use null or empty list if not mentioned."
-    )
+    system = EXTRACT_OPTIONAL.render()
     return await _extract(text, api_key, system)
 
 
@@ -316,8 +307,7 @@ async def _ai_explain(prompt: str, api_key: str) -> str:
         {
             "role": "system",
             "content": (
-                "Ты вежливый русскоязычный ассистент-диетолог. "
-                "Кратко поясни пользователю возникшую проблему."
+                AI_EXPLAIN.render()
             ),
         },
         {"role": "user", "content": prompt},
