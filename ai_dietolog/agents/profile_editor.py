@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import logging
 
-from openai import AsyncOpenAI
-
+from ..core.llm import ask_llm
+from openai import AsyncOpenAI  # noqa: F401
+from ..core.config import load_config, agent_llm
 from ..core.prompts import PROFILE_TO_JSON
 
 logger = logging.getLogger(__name__)
@@ -29,13 +30,28 @@ async def update_profile(
         profile=json.dumps(existing_profile, ensure_ascii=False),
         language=language,
     )
-    client = AsyncOpenAI(api_key=api_key)
-    resp = await client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": system}, {"role": "user", "content": user_request}],
-        temperature=0,
-    )
-    content = resp.choices[0].message.content.strip()
+    cfg = {**load_config(), "openai_api_key": api_key}
+    provider, model = agent_llm("profile_editor", cfg)
+    if provider == "openai":
+        client = AsyncOpenAI(api_key=api_key)
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user_request}],
+            temperature=0,
+        )
+        content = resp.choices[0].message.content.strip()
+    else:
+        content = await ask_llm(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_request},
+            ],
+            model=model,
+            provider=provider,
+            temperature=0,
+            cfg=cfg,
+        )
+        content = content.strip()
     try:
         return json.loads(content)
     except json.JSONDecodeError as exc:  # noqa: BLE001

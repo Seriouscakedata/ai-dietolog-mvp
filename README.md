@@ -51,12 +51,14 @@ ai_dietolog/
    **PowerShell**
    ```powershell
    $env:OPENAI_API_KEY="sk…"
+   $env:GEMINI_API_KEY="..."
    $env:TELEGRAM_BOT_TOKEN="..."
    ```
 
    **cmd**
    ```cmd
    set OPENAI_API_KEY=sk…
+   set GEMINI_API_KEY=...
    set TELEGRAM_BOT_TOKEN=...
    ```
 
@@ -69,8 +71,22 @@ ai_dietolog/
 ## Конфигурация
 
 В файле `config.json` задаются ключевые параметры: интервалы проверок, пороги для анализа, а также значения по умолчанию, используемые для расчётов.  Изменяя этот файл, вы можете адаптировать поведение системы без модификации кода.
-Опция `use_llm_norms` включает расчёт норм с помощью модели OpenAI вместо
-встроенных формул.
+Опция `use_llm_norms` включает расчёт норм с помощью LLM. Поле `llm_provider`
+задаёт используемый сервис (`openai` или `gemini`) по умолчанию. Для каждого
+провайдера нужно указать соответствующий API‑ключ (`openai_api_key` или
+`gemini_api_key`). В блоке `agents` можно задать модель и провайдера для
+каждого агента отдельно. Если `provider` пропущен, используется значение из
+`llm_provider`.
+
+Пример настройки агента в `config.json`:
+
+```json
+{
+  "agents": {
+    "intake": {"provider": "gemini", "model": "gemini-pro"}
+  }
+}
+```
 
 ## Документация
 

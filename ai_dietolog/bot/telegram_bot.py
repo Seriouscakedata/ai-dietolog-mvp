@@ -35,7 +35,9 @@ from telegram.ext import (
     filters,
 )
 
-from openai import AsyncOpenAI
+from ..core.llm import ask_llm
+from openai import AsyncOpenAI  # noqa: F401
+from ..core.config import load_config, agent_llm
 
 from ..core import storage
 from ..core.config import load_config
@@ -131,17 +133,30 @@ async def setup_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def _extract(text: str, api_key: str, system: str) -> dict:
-    """Helper to call OpenAI and parse JSON."""
-    client = AsyncOpenAI(api_key=api_key)
-    resp = await client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": text},
-        ],
-        temperature=0,
-    )
-    return json.loads(resp.choices[0].message.content)
+    """Helper to call a language model and parse JSON."""
+    cfg = {**load_config(), "openai_api_key": api_key}
+    provider, model = agent_llm("extract", cfg)
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": text},
+    ]
+    if provider == "openai":
+        client = AsyncOpenAI(api_key=api_key)
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0,
+        )
+        content = resp.choices[0].message.content
+    else:
+        content = await ask_llm(
+            messages,
+            model=model,
+            provider=provider,
+            temperature=0,
+            cfg=cfg,
+        )
+    return json.loads(content)
 
 
 async def extract_field(field: str, text: str, api_key: str) -> dict:
@@ -295,22 +310,35 @@ def format_stats(norms: Norms, summary: Total, comment: str | None = None) -> st
 
 async def _ai_explain(prompt: str, api_key: str) -> str:
     """Return a short explanation from the language model."""
-    client = AsyncOpenAI(api_key=api_key)
-    resp = await client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Ты вежливый русскоязычный ассистент-диетолог. "
-                    "Кратко поясни пользователю возникшую проблему."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.5,
-    )
-    return resp.choices[0].message.content.strip()
+    cfg = {**load_config(), "openai_api_key": api_key}
+    provider, model = agent_llm("ai_explain", cfg)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Ты вежливый русскоязычный ассистент-диетолог. "
+                "Кратко поясни пользователю возникшую проблему."
+            ),
+        },
+        {"role": "user", "content": prompt},
+    ]
+    if provider == "openai":
+        client = AsyncOpenAI(api_key=api_key)
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.5,
+        )
+        content = resp.choices[0].message.content
+    else:
+        content = await ask_llm(
+            messages,
+            model=model,
+            provider=provider,
+            temperature=0.5,
+            cfg=cfg,
+        )
+    return content.strip()
 
 
 async def validate_mandatory(data: dict, api_key: str) -> str | None:

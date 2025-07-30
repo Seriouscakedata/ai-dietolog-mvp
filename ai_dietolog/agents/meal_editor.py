@@ -6,9 +6,9 @@ import json
 import logging
 from typing import Optional
 
-from openai import AsyncOpenAI
-
-from ..core.config import openai_api_key
+from ..core.llm import ask_llm
+from openai import AsyncOpenAI  # noqa: F401
+from ..core.config import openai_api_key, load_config, agent_llm
 from pydantic import ValidationError
 
 from ..core.prompts import UPDATE_MEAL_JSON
@@ -38,7 +38,6 @@ async def edit_meal(
         comment=comment,
         language=language,
     )
-    client = AsyncOpenAI(api_key=openai_api_key())
     messages = []
     if history:
         hist_text = "\n".join(history[-20:])
@@ -53,14 +52,28 @@ async def edit_meal(
         )
     messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": comment})
-    resp = await client.chat.completions.create(
-        model="gpt-4o",
-        messages=messages,
-        temperature=0,
-        response_format={"type": "json_object"},
-    )
+    cfg = load_config()
+    provider, model = agent_llm("meal_editor", cfg)
+    if provider == "openai":
+        client = AsyncOpenAI(api_key=cfg.get("openai_api_key") or openai_api_key())
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+        content = resp.choices[0].message.content
+    else:
+        content = await ask_llm(
+            messages,
+            model=model,
+            provider=provider,
+            temperature=0,
+            response_format={"type": "json_object"},
+            cfg=cfg,
+        )
     try:
-        data = json.loads(resp.choices[0].message.content)
+        data = json.loads(content)
     except json.JSONDecodeError as exc:  # noqa: BLE001
         logger.exception("Failed to parse meal update: %s", exc)
         return existing_meal
