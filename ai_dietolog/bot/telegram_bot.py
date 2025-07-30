@@ -17,47 +17,47 @@ import logging
 import os
 from datetime import datetime
 
+from colorama import Fore, Style
+from colorama import init as colorama_init
+from openai import AsyncOpenAI  # noqa: F401
 from telegram import (
-    Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
+    Update,
 )
 from telegram.error import TimedOut
 from telegram.ext import (
     Application,
-    CommandHandler,
     CallbackQueryHandler,
+    CommandHandler,
     ContextTypes,
     ConversationHandler,
     MessageHandler,
     filters,
 )
 
-from ..core.llm import ask_llm
-from openai import AsyncOpenAI  # noqa: F401
-from ..core.config import load_config, agent_llm
-
-from ..core import storage
-from ..core.config import load_config
-from ..core.schema import (
-    Profile,
-    Today,
-    Meal,
-    Total,
-    HistoryMeal,
-    HistoryMealEntry,
-    MealBrief,
-    Counters,
-    Norms,
-)
-from ..agents.profile_collector import build_profile
 from ..agents import profile_editor
-from ..agents.intake import intake
 from ..agents.contextual import analyze_context
 from ..agents.daily_review import analyze_day as analyze_day_summary
+from ..agents.intake import intake
 from ..agents.meal_editor import edit_meal
+from ..agents.profile_collector import build_profile
+from ..core import storage
+from ..core.config import agent_llm, load_config
+from ..core.llm import ask_llm, check_llm_connectivity
+from ..core.schema import (
+    Counters,
+    HistoryMeal,
+    HistoryMealEntry,
+    Meal,
+    MealBrief,
+    Norms,
+    Profile,
+    Today,
+    Total,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -968,7 +968,23 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
 
 def main() -> None:
     """Main entry point.  Instantiate the bot and run polling."""
+    colorama_init()
     cfg = load_config()
+
+    statuses = check_llm_connectivity(cfg)
+    openai_msg = (
+        f"{Fore.GREEN}connected{Style.RESET_ALL}"
+        if statuses.get("openai")
+        else f"{Fore.RED}unavailable{Style.RESET_ALL}"
+    )
+    gemini_msg = (
+        f"{Fore.GREEN}connected{Style.RESET_ALL}"
+        if statuses.get("gemini")
+        else f"{Fore.RED}unavailable{Style.RESET_ALL}"
+    )
+    logger.info("OpenAI LLM: %s", openai_msg)
+    logger.info("Google LLM: %s", gemini_msg)
+
     token = cfg.get("telegram_bot_token") or os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
         logger.warning("TELEGRAM_BOT_TOKEN is not set; bot will not start.")
