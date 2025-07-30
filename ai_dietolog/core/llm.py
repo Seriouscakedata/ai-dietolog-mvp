@@ -6,13 +6,11 @@ import base64
 import os
 from typing import Any, Iterable, Mapping, Optional
 
-from openai import AsyncOpenAI
-import google.generativeai as genai
-from google.generativeai.types import content_types
+from openai import AsyncOpenAI, OpenAI
 
-from .config import load_config, openai_api_key, gemini_api_key
+from .config import gemini_api_key, load_config, openai_api_key
 
-__all__ = ["ask_llm"]
+__all__ = ["ask_llm", "check_llm_connectivity"]
 
 
 def _to_gemini_messages(messages: Iterable[Mapping[str, Any]]) -> list[dict]:
@@ -36,6 +34,39 @@ def _to_gemini_messages(messages: Iterable[Mapping[str, Any]]) -> list[dict]:
             parts.append(content)
         converted.append({"role": m.get("role", "user"), "parts": parts})
     return converted
+
+
+def check_llm_connectivity(cfg: Optional[dict] = None) -> dict[str, bool]:
+    """Check connectivity to configured LLM providers.
+
+    Returns a mapping ``{"openai": bool, "gemini": bool}`` indicating
+    whether a simple request to each provider succeeded.  The function
+    attempts to list available models using the provided API keys.
+    """
+
+    cfg = cfg or load_config()
+    statuses = {"openai": False, "gemini": False}
+
+    openai_key = cfg.get("openai_api_key") or openai_api_key()
+    if openai_key:
+        try:
+            OpenAI(api_key=openai_key).models.list()
+            statuses["openai"] = True
+        except Exception:
+            pass
+
+    gemini_key = cfg.get("gemini_api_key") or gemini_api_key()
+    if gemini_key:
+        try:
+            import google.generativeai as genai  # type: ignore
+
+            genai.configure(api_key=gemini_key)
+            genai.list_models()
+            statuses["gemini"] = True
+        except Exception:
+            pass
+
+    return statuses
 
 
 async def ask_llm(
@@ -65,6 +96,13 @@ async def ask_llm(
         return resp.choices[0].message.content
 
     if provider == "gemini":
+        try:
+            import google.generativeai as genai  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "google-generativeai package is required for Gemini provider"
+            ) from exc
+
         api_key = cfg.get("gemini_api_key") or gemini_api_key()
         genai.configure(api_key=api_key)
         gem_model = genai.GenerativeModel(model or "gemini-pro")
