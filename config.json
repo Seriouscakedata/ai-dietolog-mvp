@@ -4,14 +4,22 @@
   "gemini_api_key": "",
   "llm_provider": "openai",
   "agents": {
-    "extract": {"model": "gpt-3.5-turbo"},
-    "ai_explain": {"model": "gpt-3.5-turbo"},
-    "intake": {"model": "gpt-4o"},
-    "meal_editor": {"model": "gpt-4o"},
-    "contextual": {"model": "gpt-4o"},
-    "daily_review": {"model": "gpt-4o"},
-    "norms_ai": {"model": "gpt-4o"},
-    "profile_editor": {"model": "gpt-4o"}
+    # Извлекает блюда и продукты из текста сообщения
+    "extract": {"provider": "gemini", "model": "gemini-pro"},
+    # Отвечает на вопросы пользователя
+    "ai_explain": {"provider": "openai", "model": "gpt-3.5-turbo"},
+    # Считает показатели рациона за день
+    "intake": {"provider": "openai", "model": "gpt-4o"},
+    # Позволяет скорректировать запись приёма пищи
+    "meal_editor": {"provider": "openai", "model": "gpt-4o"},
+    # Поддерживает контекст разговора
+    "contextual": {"provider": "openai", "model": "gpt-4o"},
+    # Дает рекомендации по итогам дня
+    "daily_review": {"provider": "openai", "model": "gpt-4o"},
+    # Вычисляет нормы питания через LLM
+    "norms_ai": {"provider": "gemini", "model": "gemini-pro"},
+    # Обновляет профиль пользователя
+    "profile_editor": {"provider": "openai", "model": "gpt-4o"}
   },
   "use_llm_norms": false,
   "pending_check_min": 5,

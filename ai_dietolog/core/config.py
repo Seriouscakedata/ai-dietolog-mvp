@@ -20,7 +20,17 @@ def load_config() -> dict:
     cfg_path = Path(__file__).resolve().parent.parent.parent / "config.json"
     if cfg_path.exists():
         with cfg_path.open("r", encoding="utf-8") as f:
-            return json.load(f)
+            data = []
+            for line in f:
+                l = line.strip()
+                if l.startswith("#") or l.startswith("//"):
+                    continue
+                if "#" in line:
+                    line = line.split("#", 1)[0]
+                if "//" in line:
+                    line = line.split("//", 1)[0]
+                data.append(line)
+            return json.loads("".join(data))
     return {
         "telegram_bot_token": os.getenv("TELEGRAM_BOT_TOKEN", ""),
         "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
