@@ -36,11 +36,13 @@ MEAL_JSON = Template(
 # Template for refining a meal with additional comments
 UPDATE_MEAL_JSON = Template(
     "You are a nutrition assistant.\n"
-    "Here is the current meal JSON:\n"
+    "Here is the current meal JSON with its nutrition data:\n"
     "{{ meal }}\n\n"
-    "The user added a comment: '{{ comment }}'.\n"
-    "Update the JSON to reflect this comment. Keep the existing items if possible,\n"
-    "but you may adjust them when the comment clearly changes the dish.\n"
+    "Original user description: '{{ user_desc }}'.\n"
+    "The user added a new comment: '{{ comment }}'.\n"
+    "Recalculate the meal according to this comment, updating all nutrition"
+    " values if they change. Keep the existing items when possible but adjust"
+    " them if the comment clearly alters the dish.\n"
     "Return only the updated JSON in {{ language }} without extra explanations."
 )
 
