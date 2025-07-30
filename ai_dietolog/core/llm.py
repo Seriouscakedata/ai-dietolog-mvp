@@ -32,7 +32,12 @@ def _to_gemini_messages(messages: Iterable[Mapping[str, Any]]) -> list[dict]:
                         parts.append({"inline_data": {"mime_type": mime, "data": data}})
         elif content is not None:
             parts.append(content)
-        converted.append({"role": m.get("role", "user"), "parts": parts})
+        role = m.get("role", "user")
+        if role == "assistant":
+            role = "model"
+        elif role not in {"user", "model"}:
+            role = "user"
+        converted.append({"role": role, "parts": parts})
     return converted
 
 
