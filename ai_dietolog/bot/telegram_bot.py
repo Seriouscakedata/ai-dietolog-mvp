@@ -60,6 +60,9 @@ from ..agents.meal_editor import edit_meal
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+comment_conv: ConversationHandler | None = None
+
+
 # Conversation states for conversations
 (
     MANDATORY,
@@ -476,6 +479,21 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
+def _end_comment_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Terminate the comment conversation if it's active."""
+    global comment_conv
+    if comment_conv is None:
+        return
+    try:
+        key = comment_conv._get_key(update)
+        if key in comment_conv._conversations:
+            comment_conv._update_state(ConversationHandler.END, key)
+    except Exception:  # noqa: BLE001
+        pass
+    context.user_data.pop("comment_meal_id", None)
+    context.user_data.pop("comment_message", None)
+
+
 async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Send the current profile summary with an edit button."""
     profile = storage.load_profile(update.effective_user.id, Profile)
@@ -542,6 +560,7 @@ async def apply_profile_edit(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def add_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start meal logging by asking for meal type."""
+    _end_comment_conv(update, context)
     context.user_data["language"] = update.effective_user.language_code or "ru"
     keyboard = ReplyKeyboardMarkup(
         [["Завтрак", "Обед"], ["Ужин", "Перекус"]],
@@ -624,6 +643,7 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+    _end_comment_conv(update, context)
     meal_id = query.data.split(":", 1)[1]
     today = storage.load_today(update.effective_user.id)
     meal = next((m for m in today.meals if m.id == meal_id), None)
@@ -663,6 +683,7 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def start_edit_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
+    _end_comment_conv(update, context)
     context.user_data["edit_meal_id"] = query.data.split(":", 1)[1]
     await query.message.reply_text("Введите процент съеденного (1-100):")
     return SET_PERCENT
@@ -710,6 +731,7 @@ async def apply_percent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def start_comment_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
+    _end_comment_conv(update, context)
     context.user_data["comment_meal_id"] = query.data.split(":", 1)[1]
     context.user_data["comment_message"] = (
         query.message.chat_id,
@@ -783,12 +805,14 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await context.bot.edit_message_text(
             chat_id=chat_id, message_id=msg_id, text=text, reply_markup=keyboard
         )
+    _end_comment_conv(update, context)
     return ConversationHandler.END
 
 
 async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+    _end_comment_conv(update, context)
     meal_id = query.data.split(":", 1)[1]
     user_id = update.effective_user.id
     today = storage.load_today(user_id)
@@ -975,6 +999,7 @@ def main() -> None:
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
+    global comment_conv
     comment_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(start_comment_meal, pattern="^comment:")],
         states={
@@ -983,6 +1008,7 @@ def main() -> None:
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True,
     )
 
     application.add_handler(conv_handler)
