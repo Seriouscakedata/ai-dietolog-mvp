@@ -34,6 +34,7 @@ async def edit_meal(
     """
     system = UPDATE_MEAL_JSON.render(
         meal=json.dumps(existing_meal.model_dump(mode="json"), ensure_ascii=False),
+        user_desc=existing_meal.user_desc,
         comment=comment,
         language=language,
     )
