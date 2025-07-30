@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from ..core.prompts import UPDATE_MEAL_JSON
 from ..core.schema import Item, Meal, Total
-from ..core.utils import parse_int
+from ..core.utils import parse_int, parse_json_block
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +73,9 @@ async def edit_meal(
             cfg=cfg,
         )
     try:
-        data = json.loads(content)
+        data = parse_json_block(content)
     except json.JSONDecodeError as exc:  # noqa: BLE001
-        logger.exception("Failed to parse meal update: %s", exc)
+        logger.exception("Failed to parse meal update: %s; content=%r", exc, content)
         return existing_meal
 
     items_raw = data.get("items", [])
