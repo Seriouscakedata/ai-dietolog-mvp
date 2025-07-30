@@ -1,7 +1,8 @@
+import json
 import re
 from typing import Any, Optional
 
-__all__ = ["parse_int"]
+__all__ = ["parse_int", "parse_json_block"]
 
 
 def parse_int(value: Any) -> Optional[int]:
@@ -25,3 +26,17 @@ def parse_int(value: Any) -> Optional[int]:
             except ValueError:
                 return None
     return None
+
+
+def parse_json_block(text: str) -> dict:
+    """Return JSON object from ``text`` even if wrapped in extra text."""
+    text = text.strip()
+    if not text:
+        raise json.JSONDecodeError("Expecting value", text, 0)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        m = re.search(r"\{.*\}", text, re.DOTALL)
+        if m:
+            return json.loads(m.group(0))
+        raise
