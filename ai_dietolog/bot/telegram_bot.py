@@ -805,7 +805,10 @@ async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
     today.meals = [m for m in today.meals if m.id != meal_id]
     storage.save_today(user_id, today)
-    await query.message.edit_text("Удалено")
+    if query.message.photo:
+        await query.message.edit_caption("Удалено")
+    else:
+        await query.message.edit_text("Удалено")
 
 
 async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
