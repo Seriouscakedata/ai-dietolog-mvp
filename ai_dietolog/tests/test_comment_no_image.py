@@ -2,7 +2,7 @@ import asyncio
 from types import SimpleNamespace
 from datetime import datetime
 
-import ai_dietolog.bot.telegram_bot as bot
+import ai_dietolog.bot.handlers.meal_logging as bot
 from ai_dietolog.core.schema import Item, Meal, Total, Today
 from ai_dietolog.core import storage
 

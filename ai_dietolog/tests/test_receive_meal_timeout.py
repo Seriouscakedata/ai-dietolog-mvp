@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
-import ai_dietolog.bot.telegram_bot as bot
+import ai_dietolog.bot.handlers.meal_logging as bot
 
 
 def test_receive_meal_timeout(monkeypatch):
