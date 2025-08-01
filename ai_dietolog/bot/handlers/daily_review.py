@@ -55,15 +55,62 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         user_id,
     )
     today = storage.load_today(user_id)
+    pending = sum(m.pending for m in today.meals)
+    logger.info(
+        "Loaded Today state for user %s | meals=%d | pending=%d | summary=%s",
+        user_id,
+        len(today.meals),
+        pending,
+        today.summary.model_dump(),
+    )
+    logger.debug(
+        "Meal details for user %s: %s",
+        user_id,
+        [
+            {
+                "type": m.type,
+                "pending": m.pending,
+                "total": m.total.model_dump(),
+            }
+            for m in today.meals
+        ],
+    )
     confirmed = [m for m in today.meals if not m.pending]
-    logger.debug("User %s has %d confirmed meals", user_id, len(confirmed))
+    logger.info("User %s has %d confirmed meals", user_id, len(confirmed))
     if not confirmed:
-        logger.warning(
-            "Process: finish_day | Agent: daily_review | No confirmed meals for user %s",
-            user_id,
+        has_summary = any(
+            getattr(today.summary, field) for field in today.summary.model_fields
         )
-        await update.message.reply_text("Нет подтверждённых приёмов пищи")
-        return
+        if has_summary:
+            logger.warning(
+                "Process: finish_day | Agent: daily_review | No confirmed meals for user %s, "
+                "but summary totals present; assuming meals confirmed",
+                user_id,
+            )
+            logger.debug(
+                "Assuming meals confirmed for user %s based on summary totals: %s",
+                user_id,
+                today.summary.model_dump(),
+            )
+            confirmed = today.meals
+            for meal in confirmed:
+                meal.pending = False
+            storage.save_today(user_id, today)
+            logger.debug(
+                "Persisted meal confirmation fallback for user %s", user_id
+            )
+        else:
+            logger.warning(
+                "Process: finish_day | Agent: daily_review | No confirmed meals for user %s",
+                user_id,
+            )
+            logger.debug(
+                "Today's summary for user %s when failing: %s",
+                user_id,
+                today.summary.model_dump(),
+            )
+            await update.message.reply_text("Нет подтверждённых приёмов пищи")
+            return
     profile = storage.load_profile(user_id, Profile)
     cfg = load_config()
     meal_lines = []
@@ -95,7 +142,7 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Day analysis failed: %s", exc)
-        comment_text = None
+        comment_text = ""
     text = "\U0001f4c5 *Итоги дня*\n" + "\n".join(meal_lines) + "\n\n" + stats
     if comment_text:
         text += "\n\n" + comment_text
