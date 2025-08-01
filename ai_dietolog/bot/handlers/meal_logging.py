@@ -218,8 +218,13 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         history = context.user_data.setdefault("history", [])
         history.append(comment)
         del history[:-20]
-    if "summary" in result:
-        today.summary = Total(**result["summary"])
+    if "summary" in result and result["summary"]:
+        # Merge the new summary with the existing one instead of
+        # replacing it outright.  ``analyze_context`` may return an
+        # empty or partial summary, and constructing ``Total`` from an
+        # empty dict would reset all fields to zero, effectively erasing
+        # previously confirmed meal totals.
+        today.summary = today.summary.model_copy(update=result["summary"])
     storage.save_today(update.effective_user.id, today)
     if hasattr(context, "user_data"):
         context.user_data.get("meals", {}).pop(meal_id, None)
