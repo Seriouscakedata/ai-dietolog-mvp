@@ -133,6 +133,9 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     meal.user_desc = desc
     meal.image_file_id = file_id
     storage.append_meal(update.effective_user.id, meal)
+    if hasattr(context, "user_data"):
+        context.user_data.setdefault("meals", {})[meal.id] = meal
+    logger.info("Meal %s appended for user %s", meal.id, update.effective_user.id)
     keyboard = InlineKeyboardMarkup(
         [
             [
@@ -166,8 +169,15 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     today = storage.load_today(update.effective_user.id)
     meal = next((m for m in today.meals if m.id == meal_id), None)
     if not meal:
-        await query.message.reply_text("Запись не найдена")
-        return
+        meal = getattr(context, "user_data", {}).get("meals", {}).get(meal_id)
+        if not meal:
+            logger.warning(
+                "Meal %s not found for user %s", meal_id, update.effective_user.id
+            )
+            await query.message.reply_text("Запись не найдена")
+            return
+        logger.debug("Using in-memory meal %s for confirmation", meal_id)
+    logger.info("Confirming meal %s for user %s", meal_id, update.effective_user.id)
     if not meal.pending:
         await query.message.reply_text("Уже подтверждено")
         return
@@ -190,6 +200,8 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         history.append(comment)
         del history[:-20]
     storage.save_today(update.effective_user.id, today)
+    if hasattr(context, "user_data"):
+        context.user_data.get("meals", {}).pop(meal_id, None)
     if query.message.photo:
         await query.message.edit_caption(meal_card(meal))
     else:
@@ -328,6 +340,7 @@ async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     meal = next((m for m in today.meals if m.id == meal_id), None)
     if not meal:
         await query.message.reply_text("Запись не найдена")
+        logger.warning("Attempted delete of missing meal %s for user %s", meal_id, user_id)
         return
     if not meal.pending:
         for field in today.summary.model_fields:
@@ -338,6 +351,9 @@ async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
     today.meals = [m for m in today.meals if m.id != meal_id]
     storage.save_today(user_id, today)
+    if hasattr(context, "user_data"):
+        context.user_data.get("meals", {}).pop(meal_id, None)
+    logger.info("Meal %s deleted for user %s", meal_id, user_id)
     if query.message.photo:
         await query.message.edit_caption("Удалено")
     else:
