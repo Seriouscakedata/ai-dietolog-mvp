@@ -15,6 +15,9 @@ from typing import Any, Type, TypeVar
 from filelock import FileLock
 from pydantic import BaseModel
 from .schema import Today
+import logging
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -144,12 +147,29 @@ def today_path(user_id: str | int) -> Path:
 
 def load_today(user_id: str | int) -> Today:
     """Load today's meal log for ``user_id``."""
-    return read_json(today_path(user_id), Today)
+    path = today_path(user_id)
+    today = read_json(path, Today)
+    logger.debug(
+        "load_today: user=%s path=%s meals=%d summary=%s",
+        user_id,
+        path,
+        len(today.meals),
+        today.summary.model_dump(),
+    )
+    return today
 
 
 def save_today(user_id: str | int, today: Today) -> None:
     """Persist today's data for ``user_id``."""
-    write_json(today_path(user_id), today)
+    path = today_path(user_id)
+    logger.debug(
+        "save_today: user=%s path=%s meals=%d summary=%s",
+        user_id,
+        path,
+        len(today.meals),
+        today.summary.model_dump(),
+    )
+    write_json(path, today)
 
 
 def append_meal(user_id: str | int, meal: BaseModel) -> None:
