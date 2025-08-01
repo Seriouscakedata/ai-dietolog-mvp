@@ -246,15 +246,6 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # previously confirmed meal totals.
         today.summary = today.summary.model_copy(update=result["summary"])
 
-    # Persist any comment or summary updates produced by the analysis.
-    storage.save_today(user_id, today)
-    logger.info(
-        "Analysis updates saved for meal %s | user %s | summary=%s",
-        meal_id,
-        user_id,
-        today.summary.model_dump(),
-    )
-
     if hasattr(context, "user_data"):
         context.user_data.get("meals", {}).pop(meal_id, None)
     if query.message.photo:
