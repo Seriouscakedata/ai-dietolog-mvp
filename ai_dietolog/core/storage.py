@@ -15,6 +15,9 @@ from typing import Any, Type, TypeVar
 from filelock import FileLock
 from pydantic import BaseModel
 from .schema import Today
+import logging
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -80,12 +83,15 @@ def write_json(path: Path, obj: BaseModel) -> None:
     # Acquire the lock associated with this file.
     lock = FileLock(str(_lock_path(path)))
     with lock:
-        # ``model_dump_json`` already encodes Unicode characters correctly in
-        # UTF‑8, so there's no need to pass ``ensure_ascii=False``.  Older
-        # versions of Pydantic don't support that argument, so we omit it here
-        # for compatibility.
-        json_data = obj.model_dump_json(indent=2)
-        path.write_text(json_data, encoding="utf-8")
+        # Serialise the model first so that any ``ValueError`` (e.g. NaN
+        # values when ``allow_nan`` is ``False``) is raised before we touch the
+        # target file.  ``model_dump`` produces a plain ``dict`` that we can
+        # encode safely with ``json.dumps``.
+        data = obj.model_dump(mode="json")
+        json_data = json.dumps(data, ensure_ascii=False, allow_nan=False, indent=2)
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        tmp_path.write_text(json_data, encoding="utf-8")
+        tmp_path.replace(path)
 
 
 def user_dir(user_id: str | int) -> Path:
@@ -141,12 +147,29 @@ def today_path(user_id: str | int) -> Path:
 
 def load_today(user_id: str | int) -> Today:
     """Load today's meal log for ``user_id``."""
-    return read_json(today_path(user_id), Today)
+    path = today_path(user_id)
+    today = read_json(path, Today)
+    logger.debug(
+        "load_today: user=%s path=%s meals=%d summary=%s",
+        user_id,
+        path,
+        len(today.meals),
+        today.summary.model_dump(),
+    )
+    return today
 
 
 def save_today(user_id: str | int, today: Today) -> None:
     """Persist today's data for ``user_id``."""
-    write_json(today_path(user_id), today)
+    path = today_path(user_id)
+    logger.debug(
+        "save_today: user=%s path=%s meals=%d summary=%s",
+        user_id,
+        path,
+        len(today.meals),
+        today.summary.model_dump(),
+    )
+    write_json(path, today)
 
 
 def append_meal(user_id: str | int, meal: BaseModel) -> None:
