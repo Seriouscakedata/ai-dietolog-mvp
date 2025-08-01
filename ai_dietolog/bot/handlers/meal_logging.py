@@ -184,7 +184,8 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await query.answer()
     _end_comment_conv(update, context)
     meal_id = query.data.split(":", 1)[1]
-    today = storage.load_today(update.effective_user.id)
+    user_id = update.effective_user.id
+    today = storage.load_today(user_id)
     meal = next((m for m in today.meals if m.id == meal_id), None)
     if not meal:
         meal = getattr(context, "user_data", {}).get("meals", {}).get(meal_id)
@@ -197,11 +198,25 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.debug("Using in-memory meal %s for confirmation", meal_id)
         today.append_meal(meal)
         logger.debug("Appended in-memory meal %s to today's log", meal_id)
-    logger.info("Confirming meal %s for user %s", meal_id, update.effective_user.id)
+    logger.info("Confirming meal %s for user %s", meal_id, user_id)
     if not meal.pending:
         await query.message.reply_text("Уже подтверждено")
         return
-    profile = storage.load_profile(update.effective_user.id, Profile)
+
+    # Immediately mark the meal as confirmed and persist the change before
+    # calling the (potentially slow) ``analyze_context`` LLM.  This avoids a
+    # race where the user finishes the day while confirmation is still in
+    # progress and the meal has not yet been saved to ``today.json``.
+    today.confirm_meal(meal.id)
+    storage.save_today(user_id, today)
+    logger.info(
+        "Meal %s persisted for user %s | summary=%s",
+        meal_id,
+        user_id,
+        today.summary.model_dump(),
+    )
+
+    profile = storage.load_profile(user_id, Profile)
     cfg = load_config()
     result = await analyze_context(
         profile.norms.model_dump(),
@@ -211,7 +226,7 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         language=context.user_data.get("language", "ru"),
         history=context.user_data.get("history"),
     )
-    today.confirm_meal(meal.id)
+
     comment = result.get("context_comment")
     if comment:
         meal.comment = f"{meal.comment or ''} {comment}".strip()
@@ -225,7 +240,16 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # empty dict would reset all fields to zero, effectively erasing
         # previously confirmed meal totals.
         today.summary = today.summary.model_copy(update=result["summary"])
-    storage.save_today(update.effective_user.id, today)
+
+    # Persist any comment or summary updates produced by the analysis.
+    storage.save_today(user_id, today)
+    logger.info(
+        "Analysis updates saved for meal %s | user %s | summary=%s",
+        meal_id,
+        user_id,
+        today.summary.model_dump(),
+    )
+
     if hasattr(context, "user_data"):
         context.user_data.get("meals", {}).pop(meal_id, None)
     if query.message.photo:
