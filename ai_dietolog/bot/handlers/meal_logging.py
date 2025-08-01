@@ -211,14 +211,15 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         language=context.user_data.get("language", "ru"),
         history=context.user_data.get("history"),
     )
-    meal.pending = False
-    today.summary = Total(**result.get("summary", {}))
+    today.confirm_meal(meal.id)
     comment = result.get("context_comment")
     if comment:
         meal.comment = f"{meal.comment or ''} {comment}".strip()
         history = context.user_data.setdefault("history", [])
         history.append(comment)
         del history[:-20]
+    if "summary" in result:
+        today.summary = Total(**result["summary"])
     storage.save_today(update.effective_user.id, today)
     if hasattr(context, "user_data"):
         context.user_data.get("meals", {}).pop(meal_id, None)
