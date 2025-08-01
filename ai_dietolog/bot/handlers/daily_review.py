@@ -50,9 +50,18 @@ def format_stats(norms: Norms, summary: Total, comment: str | None = None) -> st
 async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Summarise the day and ask to start a new one."""
     user_id = update.effective_user.id
+    logger.info(
+        "Process: finish_day | Agent: daily_review | Action: summarising day for user %s",
+        user_id,
+    )
     today = storage.load_today(user_id)
     confirmed = [m for m in today.meals if not m.pending]
+    logger.debug("User %s has %d confirmed meals", user_id, len(confirmed))
     if not confirmed:
+        logger.warning(
+            "Process: finish_day | Agent: daily_review | No confirmed meals for user %s",
+            user_id,
+        )
         await update.message.reply_text("Нет подтверждённых приёмов пищи")
         return
     profile = storage.load_profile(user_id, Profile)
@@ -117,7 +126,16 @@ async def confirm_finish_day(
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
+    logger.info(
+        "Process: confirm_finish_day | Agent: daily_review | User: %s | Decision: %s",
+        user_id,
+        query.data,
+    )
     if query.data == "finish_yes":
+        logger.info(
+            "Process: confirm_finish_day | Agent: daily_review | Action: closing day for user %s",
+            user_id,
+        )
         entry: HistoryMealEntry | None = context.user_data.get("history_entry")
         if entry:
             history = storage.read_json(
@@ -133,5 +151,9 @@ async def confirm_finish_day(
         storage.save_today(user_id, Today())
         await query.message.edit_text("День завершён. Начинаем новый!")
     else:
+        logger.info(
+            "Process: confirm_finish_day | Agent: daily_review | Action: cancelled for user %s",
+            user_id,
+        )
         await query.message.edit_text("Отменено")
     context.user_data.pop("history_entry", None)

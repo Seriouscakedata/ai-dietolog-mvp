@@ -80,6 +80,10 @@ def _scale_total(total: Total, factor: float) -> Total:
 
 async def add_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start meal logging by asking for meal type."""
+    logger.info(
+        "Process: add_meal | Agent: meal_logging | User: %s | Action: request meal type",
+        update.effective_user.id,
+    )
     _end_comment_conv(update, context)
     context.user_data["language"] = update.effective_user.language_code or "ru"
     keyboard = ReplyKeyboardMarkup(
@@ -92,9 +96,15 @@ async def add_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def receive_meal_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["meal_type"] = update.message.text.strip()
+    meal_type = update.message.text.strip()
+    logger.info(
+        "Process: receive_meal_type | Agent: meal_logging | User: %s | Meal type: %s",
+        update.effective_user.id,
+        meal_type,
+    )
+    context.user_data["meal_type"] = meal_type
     history = context.user_data.setdefault("history", [])
-    history.append(update.message.text.strip())
+    history.append(meal_type)
     del history[:-20]
     await update.message.reply_text(
         "Пришлите фото, голосовое или текстовое описание блюда.",
@@ -106,6 +116,10 @@ async def receive_meal_type(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     history = context.user_data.setdefault("history", [])
     desc = update.message.caption if update.message.caption else update.message.text
+    logger.info(
+        "Process: receive_meal_desc | Agent: meal_logging | User: %s | Description received",
+        update.effective_user.id,
+    )
     if desc:
         history.append(desc)
         del history[:-20]
@@ -162,6 +176,10 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info(
+        "Process: confirm_meal | Agent: meal_logging | User: %s",
+        update.effective_user.id,
+    )
     query = update.callback_query
     await query.answer()
     _end_comment_conv(update, context)
@@ -177,6 +195,8 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await query.message.reply_text("Запись не найдена")
             return
         logger.debug("Using in-memory meal %s for confirmation", meal_id)
+        today.append_meal(meal)
+        logger.debug("Appended in-memory meal %s to today's log", meal_id)
     logger.info("Confirming meal %s for user %s", meal_id, update.effective_user.id)
     if not meal.pending:
         await query.message.reply_text("Уже подтверждено")
