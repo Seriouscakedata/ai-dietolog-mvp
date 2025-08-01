@@ -36,6 +36,10 @@ from ..core.config import load_config
 from ..core.llm import check_llm_connectivity
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 warnings.filterwarnings("ignore", category=PTBUserWarning)
 
@@ -81,6 +85,7 @@ async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> No
 def main() -> None:
     """Main entry point.  Instantiate the bot and run polling."""
     colorama_init()
+    logger.info("Starting AI Dietolog bot")
     cfg = load_config()
 
     statuses = check_llm_connectivity(cfg)
