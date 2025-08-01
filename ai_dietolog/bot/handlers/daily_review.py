@@ -87,28 +87,18 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 "but summary totals present; assuming meals confirmed",
                 user_id,
             )
-            logger.debug(
-                "Assuming meals confirmed for user %s based on summary totals: %s",
-                user_id,
-                today.summary.model_dump(),
-            )
+
             confirmed = today.meals
             for meal in confirmed:
                 meal.pending = False
             storage.save_today(user_id, today)
-            logger.debug(
-                "Persisted meal confirmation fallback for user %s", user_id
-            )
+
         else:
             logger.warning(
                 "Process: finish_day | Agent: daily_review | No confirmed meals for user %s",
                 user_id,
             )
-            logger.debug(
-                "Today's summary for user %s when failing: %s",
-                user_id,
-                today.summary.model_dump(),
-            )
+
             await update.message.reply_text("Нет подтверждённых приёмов пищи")
             return
     profile = storage.load_profile(user_id, Profile)
