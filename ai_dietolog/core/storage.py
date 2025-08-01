@@ -80,12 +80,15 @@ def write_json(path: Path, obj: BaseModel) -> None:
     # Acquire the lock associated with this file.
     lock = FileLock(str(_lock_path(path)))
     with lock:
-        # ``model_dump_json`` already encodes Unicode characters correctly in
-        # UTF‑8, so there's no need to pass ``ensure_ascii=False``.  Older
-        # versions of Pydantic don't support that argument, so we omit it here
-        # for compatibility.
-        json_data = obj.model_dump_json(indent=2)
-        path.write_text(json_data, encoding="utf-8")
+        # Serialise the model first so that any ``ValueError`` (e.g. NaN
+        # values when ``allow_nan`` is ``False``) is raised before we touch the
+        # target file.  ``model_dump`` produces a plain ``dict`` that we can
+        # encode safely with ``json.dumps``.
+        data = obj.model_dump(mode="json")
+        json_data = json.dumps(data, ensure_ascii=False, allow_nan=False, indent=2)
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        tmp_path.write_text(json_data, encoding="utf-8")
+        tmp_path.replace(path)
 
 
 def user_dir(user_id: str | int) -> Path:
