@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import warnings
 
 from colorama import Fore, Style
 from colorama import init as colorama_init
@@ -28,11 +29,15 @@ from telegram.ext import (
     filters,
 )
 
+from telegram.warnings import PTBUserWarning
+
 from .handlers import daily_review, meal_logging, profile_setup
 from ..core.config import load_config
 from ..core.llm import check_llm_connectivity
 
 logger = logging.getLogger(__name__)
+
+warnings.filterwarnings("ignore", category=PTBUserWarning)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
