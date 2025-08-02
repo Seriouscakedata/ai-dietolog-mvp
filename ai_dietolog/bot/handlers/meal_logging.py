@@ -212,6 +212,13 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # calling the (potentially slow) ``analyze_context`` LLM.  This avoids a
     # race where the user finishes the day while confirmation is still in
     # progress and the meal has not yet been saved to ``today.json``.
+    # Capture the day summary before confirming the meal so that
+    # ``analyze_context`` receives the pre-meal totals.  The LLM then
+    # returns updated totals for the whole day, which we merge back into
+    # ``today.summary`` after analysis.  Without this, the totals would be
+    # counted twice because we would send the already-updated summary.
+    previous_summary = today.summary.model_copy()
+
     today.confirm_meal(meal.id)
     storage.save_today(user_id, today)
     logger.info(
@@ -225,7 +232,7 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     cfg = load_config()
     result = await analyze_context(
         profile.norms.model_dump(),
-        today.summary,
+        previous_summary,
         meal.total,
         cfg,
         language=context.user_data.get("language", "ru"),
