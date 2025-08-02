@@ -55,10 +55,12 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         user_id,
     )
     today = storage.load_today(user_id)
+    today_path = storage.today_path(user_id)
     pending = sum(m.pending for m in today.meals)
     logger.info(
-        "Loaded Today state for user %s | meals=%d | pending=%d | summary=%s",
+        "Loaded Today state for user %s from %s | meals=%d | pending=%d | summary=%s",
         user_id,
+        today_path,
         len(today.meals),
         pending,
         today.summary.model_dump(),
@@ -92,6 +94,10 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             for meal in confirmed:
                 meal.pending = False
             storage.save_today(user_id, today)
+            logger.info(
+                "Process: finish_day | Agent: daily_review | All meals auto-confirmed and saved to %s",
+                today_path,
+            )
 
         else:
             logger.warning(
@@ -137,6 +143,10 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if comment_text:
         text += "\n\n" + comment_text
     await update.message.reply_text(text, parse_mode="Markdown")
+    logger.info(
+        "Process: finish_day | Agent: daily_review | Summary sent to user %s",
+        user_id,
+    )
 
     entry = HistoryMealEntry(
         date=datetime.utcnow().date().isoformat(),
@@ -154,6 +164,10 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         ]
     )
     await update.message.reply_text("Начать новый день?", reply_markup=keyboard)
+    logger.info(
+        "Process: finish_day | Agent: daily_review | Prompted user %s to start new day",
+        user_id,
+    )
 
 
 async def confirm_finish_day(
@@ -175,17 +189,28 @@ async def confirm_finish_day(
         )
         entry: HistoryMealEntry | None = context.user_data.get("history_entry")
         if entry:
-            history = storage.read_json(
-                storage.json_path(user_id, "history_meal.json"), HistoryMeal
-            )
+            history_path = storage.json_path(user_id, "history_meal.json")
+            history = storage.read_json(history_path, HistoryMeal)
             history.append_day(entry, max_days=60)
-            storage.write_json(storage.json_path(user_id, "history_meal.json"), history)
-        counters = storage.read_json(
-            storage.json_path(user_id, "counters.json"), Counters
-        )
+            storage.write_json(history_path, history)
+            logger.info(
+                "Process: confirm_finish_day | Agent: daily_review | History updated at %s",
+                history_path,
+            )
+        counters_path = storage.json_path(user_id, "counters.json")
+        counters = storage.read_json(counters_path, Counters)
         counters.total_days_closed += 1
-        storage.write_json(storage.json_path(user_id, "counters.json"), counters)
+        storage.write_json(counters_path, counters)
+        logger.info(
+            "Process: confirm_finish_day | Agent: daily_review | Counters updated at %s",
+            counters_path,
+        )
+        today_path = storage.today_path(user_id)
         storage.save_today(user_id, Today())
+        logger.info(
+            "Process: confirm_finish_day | Agent: daily_review | Cleared today's data at %s",
+            today_path,
+        )
         await query.message.edit_text("День завершён. Начинаем новый!")
     else:
         logger.info(

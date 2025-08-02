@@ -128,15 +128,31 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     file_id = None
     if update.message.photo:
         photo = update.message.photo[-1]
+        photo_id = getattr(photo, "file_id", "<no-id>")
+        logger.info(
+            "Process: receive_meal_desc | Agent: meal_logging | User: %s | Photo received: %s",
+            update.effective_user.id,
+            photo_id,
+        )
         try:
             file = await photo.get_file()
             image_bytes = await file.download_as_bytearray()
-            file_id = photo.file_id
+            file_id = photo_id
+            logger.info(
+                "Process: receive_meal_desc | Agent: meal_logging | User: %s | Photo downloaded: %s",
+                update.effective_user.id,
+                file_id,
+            )
         except TimedOut:
             await update.message.reply_text(
                 "Не удалось загрузить фото, попробуйте ещё раз."
             )
             return MEAL_DESC
+    else:
+        logger.info(
+            "Process: receive_meal_desc | Agent: meal_logging | User: %s | No photo provided",
+            update.effective_user.id,
+        )
     meal_type = context.user_data.get("meal_type", "Перекус")
     meal = await intake(
         image_bytes,
@@ -150,7 +166,12 @@ async def receive_meal_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     storage.append_meal(update.effective_user.id, meal)
     if hasattr(context, "user_data"):
         context.user_data.setdefault("meals", {})[meal.id] = meal
-    logger.info("Meal %s appended for user %s", meal.id, update.effective_user.id)
+    logger.info(
+        "Process: receive_meal_desc | Agent: meal_logging | User: %s | Meal recognised: %s | Total: %s",
+        update.effective_user.id,
+        [i.name for i in meal.items],
+        meal.total.model_dump(),
+    )
     keyboard = InlineKeyboardMarkup(
         [
             [
@@ -222,9 +243,10 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     today.confirm_meal(meal.id)
     storage.save_today(user_id, today)
     logger.info(
-        "Meal %s persisted for user %s | summary=%s",
+        "Meal %s persisted for user %s | path=%s | summary=%s",
         meal_id,
         user_id,
+        storage.today_path(user_id),
         today.summary.model_dump(),
     )
 
@@ -257,9 +279,10 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # as ``finish_day`` can see the latest meal list and summary.
     storage.save_today(user_id, today)
     logger.info(
-        "Analysis updates saved for meal %s | user %s | summary=%s",
+        "Analysis updates saved for meal %s | user %s | path=%s | summary=%s",
         meal_id,
         user_id,
+        storage.today_path(user_id),
         today.summary.model_dump(),
     )
 
@@ -312,6 +335,12 @@ async def apply_percent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             )
             setattr(today.summary, field, value)
     storage.save_today(user_id, today)
+    logger.info(
+        "Process: apply_percent | Agent: meal_logging | User: %s | Meal: %s saved to %s",
+        user_id,
+        meal_id,
+        storage.today_path(user_id),
+    )
     await update.message.reply_text("Изменено")
     return ConversationHandler.END
 
@@ -320,7 +349,13 @@ async def start_comment_meal(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     _end_comment_conv(update, context)
-    context.user_data["comment_meal_id"] = query.data.split(":", 1)[1]
+    meal_id = query.data.split(":", 1)[1]
+    logger.info(
+        "Process: start_comment_meal | Agent: meal_logging | User: %s | Meal: %s",
+        update.effective_user.id,
+        meal_id,
+    )
+    context.user_data["comment_meal_id"] = meal_id
     context.user_data["comment_message"] = (
         query.message.chat_id,
         query.message.message_id,
@@ -333,6 +368,12 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     user_id = update.effective_user.id
     meal_id = context.user_data.get("comment_meal_id")
     comment = update.message.text.strip()
+    logger.info(
+        "Process: apply_comment | Agent: meal_logging | User: %s | Meal: %s | Comment: %s",
+        user_id,
+        meal_id,
+        comment or "<empty>",
+    )
     history = context.user_data.setdefault("history", [])
     if comment:
         history.append(comment)
@@ -364,6 +405,12 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             )
             setattr(today.summary, field, value)
     storage.save_today(user_id, today)
+    logger.info(
+        "Process: apply_comment | Agent: meal_logging | User: %s | Meal: %s saved to %s",
+        user_id,
+        meal_id,
+        storage.today_path(user_id),
+    )
     keyboard = InlineKeyboardMarkup(
         [
             [
@@ -416,7 +463,12 @@ async def delete_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     storage.save_today(user_id, today)
     if hasattr(context, "user_data"):
         context.user_data.get("meals", {}).pop(meal_id, None)
-    logger.info("Meal %s deleted for user %s", meal_id, user_id)
+    logger.info(
+        "Process: delete_meal | Agent: meal_logging | User: %s | Meal: %s removed from %s",
+        user_id,
+        meal_id,
+        storage.today_path(user_id),
+    )
     if query.message.photo:
         await query.message.edit_caption("Удалено")
     else:
