@@ -174,6 +174,13 @@ def save_today(user_id: str | int, today: Today) -> None:
 
 def append_meal(user_id: str | int, meal: BaseModel) -> None:
     """Append a meal to ``today.json`` for the user."""
+    path = today_path(user_id)
+    logger.info(
+        "append_meal: user=%s meal_id=%s path=%s",
+        user_id,
+        getattr(meal, "id", "<unknown>"),
+        path,
+    )
     today = load_today(user_id)
     today.append_meal(meal)
     save_today(user_id, today)
