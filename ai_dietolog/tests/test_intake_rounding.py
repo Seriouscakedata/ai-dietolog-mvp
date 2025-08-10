@@ -13,28 +13,10 @@ def test_fractional_macros_rounding(monkeypatch):
     }
     meal_json = json.dumps(meal_resp)
 
-    async def fake_create(*args, **kwargs):
-        class Message:
-            def __init__(self, content):
-                self.content = meal_json
+    async def fake_ask_llm(*args, **kwargs):
+        return meal_json
 
-        class Choice:
-            def __init__(self):
-                self.message = Message(meal_json)
-
-        class Resp:
-            def __init__(self):
-                self.choices = [Choice()]
-
-        return Resp()
-
-    class FakeClient:
-        def __init__(self):
-            self.chat = type(
-                "Chat", (), {"completions": type("Comp", (), {"create": fake_create})()}
-            )()
-
-    monkeypatch.setattr(intake_module, "AsyncOpenAI", lambda *a, **k: FakeClient())
+    monkeypatch.setattr(intake_module, "ask_llm", fake_ask_llm)
 
     meal = asyncio.run(
         intake_module.intake(image=None, user_text="apple", meal_type="breakfast")

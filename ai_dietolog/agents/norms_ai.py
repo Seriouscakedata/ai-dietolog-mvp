@@ -6,8 +6,7 @@ import json
 from typing import Optional
 
 from ..core.llm import ask_llm
-from openai import AsyncOpenAI  # noqa: F401
-from ..core.config import openai_api_key, load_config, agent_llm
+from ..core.config import load_config, agent_llm
 
 from ..core.prompts import AI_NORMS
 from ..core.schema import Norms
@@ -27,21 +26,12 @@ async def compute_norms_llm(
         language=language,
     )
     messages = [{"role": "system", "content": system}]
-    if provider == "openai":
-        client = AsyncOpenAI(api_key=cfg.get("openai_api_key") or openai_api_key())
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0,
-        )
-        text = resp.choices[0].message.content
-    else:
-        text = await ask_llm(
-            messages,
-            model=model,
-            provider=provider,
-            temperature=0,
-            cfg=cfg,
-        )
+    text = await ask_llm(
+        messages,
+        model=model,
+        provider=provider,
+        temperature=0,
+        cfg=cfg,
+    )
     data = json.loads(text)
     return Norms(**data)

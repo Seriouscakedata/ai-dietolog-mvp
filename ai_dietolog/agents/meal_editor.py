@@ -7,8 +7,7 @@ import logging
 from typing import Optional
 
 from ..core.llm import ask_llm
-from openai import AsyncOpenAI  # noqa: F401
-from ..core.config import openai_api_key, load_config, agent_llm
+from ..core.config import load_config, agent_llm
 from pydantic import ValidationError
 
 from ..core.prompts import UPDATE_MEAL_JSON
@@ -54,24 +53,14 @@ async def edit_meal(
     messages.append({"role": "user", "content": comment})
     cfg = load_config()
     provider, model = agent_llm("meal_editor", cfg)
-    if provider == "openai":
-        client = AsyncOpenAI(api_key=cfg.get("openai_api_key") or openai_api_key())
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-        content = resp.choices[0].message.content
-    else:
-        content = await ask_llm(
-            messages,
-            model=model,
-            provider=provider,
-            temperature=0,
-            response_format={"type": "json_object"},
-            cfg=cfg,
-        )
+    content = await ask_llm(
+        messages,
+        model=model,
+        provider=provider,
+        temperature=0,
+        response_format={"type": "json_object"},
+        cfg=cfg,
+    )
     try:
         data = parse_json_block(content)
     except json.JSONDecodeError as exc:  # noqa: BLE001

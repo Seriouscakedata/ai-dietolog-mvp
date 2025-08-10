@@ -10,8 +10,7 @@ from uuid import uuid4
 from typing import Optional
 
 from ..core.llm import ask_llm
-from openai import AsyncOpenAI  # noqa: F401
-from ..core.config import openai_api_key, load_config, agent_llm
+from ..core.config import load_config, agent_llm
 from pydantic import ValidationError
 
 from ..core.prompts import MEAL_JSON
@@ -75,24 +74,14 @@ async def intake(
 
     cfg = load_config()
     provider, model = agent_llm("intake", cfg)
-    if provider == "openai":
-        client = AsyncOpenAI(api_key=cfg.get("openai_api_key") or openai_api_key())
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-        content = resp.choices[0].message.content
-    else:
-        content = await ask_llm(
-            messages,
-            model=model,
-            provider=provider,
-            temperature=0,
-            response_format={"type": "json_object"},
-            cfg=cfg,
-        )
+    content = await ask_llm(
+        messages,
+        model=model,
+        provider=provider,
+        temperature=0,
+        response_format={"type": "json_object"},
+        cfg=cfg,
+    )
     data = json.loads(content)
     logger.info("Process: intake | Agent: intake | Raw response: %s", content)
 
