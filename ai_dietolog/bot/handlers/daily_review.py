@@ -152,6 +152,7 @@ async def finish_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         date=datetime.utcnow().date().isoformat(),
         num_meals=len(confirmed),
         meals=briefs,
+        summary=today.summary.model_copy(),
         comment=comment_text,
     )
     context.user_data["history_entry"] = entry
