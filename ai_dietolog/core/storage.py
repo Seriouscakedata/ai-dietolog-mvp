@@ -160,16 +160,32 @@ def load_today(user_id: str | int) -> Today:
 
 
 def save_today(user_id: str | int, today: Today) -> None:
-    """Persist today's data for ``user_id``."""
+    """Persist today's data for ``user_id``.
+
+    This method now merges the incoming ``today`` object with any existing
+    meals already stored on disk.  Previously a call that contained only the
+    latest meal would overwrite the file and discard earlier entries.  By
+    merging we ensure that multiple meal confirmations within a day are
+    accumulated instead of replacing each other.
+    """
     path = today_path(user_id)
+    # Load existing state so previously saved meals are not lost.
+    existing = load_today(user_id)
+    meal_map = {m.id: m for m in existing.meals}
+    for meal in today.meals:
+        meal_map[meal.id] = meal
+    existing.meals = list(meal_map.values())
+    existing.summary = today.summary
+    existing.day_closed = today.day_closed
+    existing.last_updated = today.last_updated
     logger.debug(
         "save_today: user=%s path=%s meals=%d summary=%s",
         user_id,
         path,
-        len(today.meals),
-        today.summary.model_dump(),
+        len(existing.meals),
+        existing.summary.model_dump(),
     )
-    write_json(path, today)
+    write_json(path, existing)
 
 
 def append_meal(user_id: str | int, meal: BaseModel) -> None:
