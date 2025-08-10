@@ -426,16 +426,17 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         meal_id,
         storage.today_path(user_id),
     )
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "✍\ufe0f Комментарии", callback_data=f"comment:{meal.id}"
-                ),
-                InlineKeyboardButton("🗑 Удалить", callback_data=f"delete:{meal.id}"),
-            ]
-        ]
-    )
+    # Always offer delete and comment actions.  If the meal is still pending,
+    # keep the "confirm" button so the user can finalise it after editing.
+    buttons = [
+        InlineKeyboardButton("✍\ufe0f Комментарии", callback_data=f"comment:{meal.id}"),
+        InlineKeyboardButton("🗑 Удалить", callback_data=f"delete:{meal.id}"),
+    ]
+    if meal.pending:
+        buttons.insert(
+            0, InlineKeyboardButton("✔ Подтвердить", callback_data=f"confirm:{meal.id}")
+        )
+    keyboard = InlineKeyboardMarkup([buttons])
     text = meal_breakdown(meal)
     if meal.clarification:
         text += f"\n\n❓ {meal.clarification}"

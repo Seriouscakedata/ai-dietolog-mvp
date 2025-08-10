@@ -148,6 +148,7 @@ class HistoryMealEntry(BaseModel):
     date: str
     num_meals: int
     meals: List[MealBrief]
+    summary: Total = Field(default_factory=Total)
     comment: str = ""
 
 
