@@ -6,20 +6,58 @@
 
 ```
 ai_dietolog/
-├── bot/               # логика взаимодействия с Telegram
+├── bot/               # взаимодействие с Telegram и обработчики
 │   ├── telegram_bot.py
-├── agents/            # агенты для работы с OpenAI и формирования данных
-│   ├── profile_collector.py
-├── core/              # общий слой: хранение, модели, логика
-│   ├── storage.py
+│   └── handlers/
+│       ├── profile_setup.py    # настройка и редактирование профиля
+│       ├── meal_logging.py     # приём и изменение блюд
+│       └── daily_review.py     # завершение дня и отчёты
+├── agents/            # LLM‑агенты для обработки данных
+│   ├── intake.py             # распознаёт описание/фото блюда
+│   ├── meal_editor.py        # уточняет состав блюда по комментарию
+│   ├── contextual.py         # анализирует новый приём в контексте дня
+│   ├── daily_review.py       # формирует сводку дня
+│   ├── norms_ai.py           # рассчитывает нормы через LLM
+│   ├── profile_collector.py  # строит профиль пользователя
+│   └── profile_editor.py     # обновляет существующий профиль
+├── core/              # конфигурация, модели и бизнес‑логика
+│   ├── config.py
+│   ├── llm.py
+│   ├── logic.py
+│   ├── prompts.py / prompts.yaml
 │   ├── schema.py
-│   └── logic.py
-├── data/              # здесь создаются подкаталоги <tg_user_id>/ с JSON -файлами пользователя
-├── config.json        # основные настройки проекта
+│   └── storage.py
+├── data/              # каталоги <tg_user_id>/ с JSON‑файлами пользователя
+├── docs/              # документация проекта
+├── config.json        # настройки по умолчанию (опционально)
 └── requirements.txt   # зависимости Python
 ```
 
 Проект хранит данные каждого пользователя локально в отдельной директории `data/<tg_user_id>`.  Внутри создаются файлы `profile.json`, `today.json` и т. д. в соответствии с описанной схемой.
+
+## Агенты и взаимодействие
+
+Телеграм‑обработчики вызывают специализированные агенты:
+
+* `profile_setup` → `profile_collector.build_profile` и `profile_editor.update_profile` для создания и редактирования профиля.
+* `meal_logging` → `intake.intake` для распознавания блюда, `contextual.analyze_context` для обновления дневной статистики и `meal_editor.edit_meal` для изменений.
+* `daily_review` → `daily_review.analyze_day` для генерации итогового комментария.
+
+Агенты используют `core.llm.ask_llm` и шаблоны из `core.prompts`, а настройки провайдера и модели берутся из `core.config`.  Структурированные данные описаны в `core.schema` и сохраняются через `core.storage`.
+
+## Зависимости
+
+Ключевые библиотеки перечислены в [requirements.txt](requirements.txt):
+
+* [python-telegram-bot](https://python-telegram-bot.org/) — работа с Telegram.
+* [openai](https://pypi.org/project/openai/) и [google-generativeai](https://pypi.org/project/google-generativeai/) — обращения к LLM‑провайдерам OpenAI и Gemini.
+* [pydantic](https://docs.pydantic.dev/) — валидация данных.
+* [filelock](https://pypi.org/project/filelock/) — безопасная работа с JSON‑файлами.
+* [jinja2](https://palletsprojects.com/p/jinja/) и [pyyaml](https://pyyaml.org/) — шаблоны промтов.
+* [colorama](https://pypi.org/project/colorama/) — цветной вывод в консоль.
+* [apscheduler](https://apscheduler.readthedocs.io/) — планирование задач (зарезервировано на будущее).
+
+Полный список версий смотрите в `requirements.txt`.
 
 ## Быстрый старт на Windows
 
