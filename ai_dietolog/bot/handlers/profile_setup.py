@@ -4,7 +4,6 @@ import json
 import logging
 import os
 
-from openai import AsyncOpenAI  # noqa: F401
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ConversationHandler, ContextTypes
 
@@ -107,22 +106,13 @@ async def ai_explain(prompt: str, api_key: str) -> str:
         },
         {"role": "user", "content": prompt},
     ]
-    if provider == "openai":
-        client = AsyncOpenAI(api_key=api_key)
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0.5,
-        )
-        content = resp.choices[0].message.content
-    else:
-        content = await ask_llm(
-            messages,
-            model=model,
-            provider=provider,
-            temperature=0.5,
-            cfg=cfg,
-        )
+    content = await ask_llm(
+        messages,
+        model=model,
+        provider=provider,
+        temperature=0.5,
+        cfg=cfg,
+    )
     return content.strip()
 
 
@@ -134,22 +124,13 @@ async def _extract(text: str, api_key: str, system: str) -> dict:
         {"role": "system", "content": system},
         {"role": "user", "content": text},
     ]
-    if provider == "openai":
-        client = AsyncOpenAI(api_key=api_key)
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0,
-        )
-        content = resp.choices[0].message.content
-    else:
-        content = await ask_llm(
-            messages,
-            model=model,
-            provider=provider,
-            temperature=0,
-            cfg=cfg,
-        )
+    content = await ask_llm(
+        messages,
+        model=model,
+        provider=provider,
+        temperature=0,
+        cfg=cfg,
+    )
     return json.loads(content)
 
 

@@ -101,31 +101,6 @@ def test_apply_comment_updates_summary(monkeypatch):
     assert today.summary.protein_g == 12
 
 
-def _fake_client(response_text: str):
-    async def fake_create(*args, **kwargs):
-        class Message:
-            def __init__(self, content):
-                self.content = response_text
-
-        class Choice:
-            def __init__(self):
-                self.message = Message(response_text)
-
-        class Resp:
-            def __init__(self):
-                self.choices = [Choice()]
-
-        return Resp()
-
-    class FakeClient:
-        def __init__(self):
-            self.chat = type(
-                "Chat", (), {"completions": type("Comp", (), {"create": fake_create})()}
-            )()
-
-    return FakeClient()
-
-
 def test_edit_meal_extracts_json(monkeypatch):
     existing = Meal(
         id="1",
@@ -135,6 +110,10 @@ def test_edit_meal_extracts_json(monkeypatch):
         timestamp=datetime.utcnow(),
     )
     resp_text = "Here is the update:\n{\"items\": [{\"name\": \"cake\", \"kcal\": 110}], \"total\": {\"kcal\": 110}}"
-    monkeypatch.setattr(editor, "AsyncOpenAI", lambda *a, **k: _fake_client(resp_text))
+
+    async def fake_ask_llm(*args, **kwargs):
+        return resp_text
+
+    monkeypatch.setattr(editor, "ask_llm", fake_ask_llm)
     updated = asyncio.run(editor.edit_meal(existing, "extra"))
     assert updated.total.kcal == 110

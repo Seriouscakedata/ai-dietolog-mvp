@@ -93,8 +93,10 @@ async def ask_llm(
         kwargs = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
         }
+        # Some models (e.g. GPT-5) allow only the default temperature.
+        if not model.lower().startswith("gpt-5"):
+            kwargs["temperature"] = temperature
         if response_format is not None:
             kwargs["response_format"] = response_format
         resp = await client.chat.completions.create(**kwargs)
