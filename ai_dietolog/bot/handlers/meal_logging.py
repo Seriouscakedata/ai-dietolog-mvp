@@ -387,8 +387,17 @@ async def apply_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     today = storage.load_today(user_id)
     meal = next((m for m in today.meals if m.id == meal_id), None)
     if not meal:
-        await update.message.reply_text("Запись не найдена")
-        return ConversationHandler.END
+        meal = getattr(context, "user_data", {}).get("meals", {}).get(meal_id)
+        if meal:
+            today.append_meal(meal)
+            logger.debug(
+                "Process: apply_comment | Agent: meal_logging | User: %s | Appended in-memory meal %s",
+                user_id,
+                meal_id,
+            )
+        else:
+            await update.message.reply_text("Запись не найдена")
+            return ConversationHandler.END
     old_total = meal.total
     meal.comment = f"{meal.comment or ''} {comment}".strip()
     user_desc = f"{meal.user_desc} {comment}".strip()
