@@ -146,3 +146,55 @@ def test_confirm_meal_persists_analysis_updates(tmp_path, monkeypatch):
     assert loaded.summary.kcal == 200
     assert len(loaded.meals) == 1
     assert loaded.meals[0].pending is False
+
+
+def test_confirm_meal_persists_in_memory_meal(tmp_path, monkeypatch):
+    meal = Meal(
+        id="1",
+        type="breakfast",
+        items=[Item(name="bread", kcal=80)],
+        total=Total(kcal=80),
+        timestamp=datetime.utcnow(),
+    )
+    meal.user_desc = "bread"
+
+    monkeypatch.setattr(storage, "DATA_DIR", tmp_path)
+    storage.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(storage, "load_profile", lambda uid, cls: Profile())
+    monkeypatch.setattr(bot, "load_config", lambda: {})
+
+    async def fake_analyze_context(*args, **kwargs):
+        return {}
+
+    monkeypatch.setattr(bot, "analyze_context", fake_analyze_context)
+
+    class DummyMsg:
+        photo = None
+
+        async def edit_text(self, *a, **k):
+            pass
+
+        async def reply_text(self, *a, **k):
+            pass
+
+        async def edit_caption(self, *a, **k):
+            pass
+
+    class DummyQuery:
+        data = "confirm:1"
+        message = DummyMsg()
+
+        async def answer(self):
+            pass
+
+    update = SimpleNamespace(callback_query=DummyQuery(), effective_user=SimpleNamespace(id=1))
+    context = SimpleNamespace(user_data={"meals": {"1": meal}})
+
+    asyncio.run(bot.confirm_meal(update, context))
+
+    loaded = storage.load_today(1)
+    assert len(loaded.meals) == 1
+    assert loaded.meals[0].pending is False
+    assert loaded.meals[0].user_desc == "bread"
+    assert loaded.meals[0].total.kcal == 80
+    assert loaded.summary.kcal == 80
