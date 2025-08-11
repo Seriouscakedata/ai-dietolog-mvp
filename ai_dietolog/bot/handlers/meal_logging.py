@@ -222,14 +222,14 @@ async def confirm_meal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await query.message.reply_text("Запись не найдена")
             return
         logger.debug("Using in-memory meal %s for confirmation", meal_id)
-        # Persist the meal immediately so that subsequent reads load it from
-        # ``today.json``.  This avoids situations where the in-memory object
-        # is appended to a transient ``Today`` instance that was never written
-        # to disk, leaving ``today.json`` empty and causing ``finish_day`` to
-        # miss the confirmed meal.
-        storage.append_meal(user_id, meal)
-        today = storage.load_today(user_id)
-        logger.debug("Appended in-memory meal %s to today's log", meal_id)
+    # Persist the meal so that ``today.json`` always contains the latest
+    # description and nutrition information before confirmation.  This
+    # safeguards against scenarios where a previous ``append_meal`` call was
+    # skipped or failed, leaving only the summary in the file.
+    storage.append_meal(user_id, meal)
+    today = storage.load_today(user_id)
+    logger.debug("Ensured meal %s is written to today's log", meal_id)
+    meal = next((m for m in today.meals if m.id == meal_id), meal)
     logger.info("Confirming meal %s for user %s", meal_id, user_id)
     if not meal.pending:
         await query.message.reply_text("Уже подтверждено")
